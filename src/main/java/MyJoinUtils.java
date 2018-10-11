@@ -89,7 +89,10 @@ public class MyJoinUtils {
 				//JoinPushThroughJoinRule.LEFT,
 				//JoinPushThroughJoinRule.RIGHT));
 
-		list.add(JoinOrderTest.INSTANCE);
+        // TODO: add joinRule that is passed in -- should be a RelOptRule.
+        // and maybe not pass in the list of RelOptRules??
+		//list.add(JoinOrderTest.INSTANCE);
+
 		final Program program2 = Programs.ofRules(list);
 		program = Programs.sequence(program1, program2);
 	  }
