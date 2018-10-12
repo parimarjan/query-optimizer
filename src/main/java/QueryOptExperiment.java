@@ -7,6 +7,10 @@ import java.io.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.*;
 import org.apache.calcite.adapter.enumerable.*;
+import org.apache.calcite.rel.rules.*;
+import org.apache.calcite.plan.hep.*;
+//import org.apache.calcite.plan.hep.HepProgramBuilder;
+
 import org.apache.calcite.config.Lex;
 
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -16,10 +20,8 @@ import org.apache.calcite.schema.SchemaPlus;
 
 import org.apache.commons.io.FileUtils;
 
-//import org.apache.calcite.rel.rules.LoptOptimizeJoinRule;
-//import org.apache.calcite.rel.metadata.RelMetadataQuery;
-//import org.apache.calcite.rel.core.CorrelationId;
-//import org.apache.calcite.avatica.AvaticaConnection;
+// experimental
+import org.apache.calcite.adapter.enumerable.*;
 
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
@@ -72,7 +74,15 @@ public class QueryOptExperiment {
             if (t == PLANNER_TYPE.EXHAUSTIVE) {
                 // FIXME: Need to select only the exhaustive search rules and
                 // modify genJoinRule appropriately to take in list.
-                bld.programs(MyJoinUtils.genJoinRule(Programs.RULE_SET, 2));
+                // crashes if we add no rules here.
+                //bld.programs(MyJoinUtils.genJoinRule(Programs.RULE_SET, 2));
+                //Program program = Programs.ofRules(FilterMergeRule.INSTANCE,
+                        //EnumerableRules.ENUMERABLE_FILTER_RULE,
+                        //EnumerableRules.ENUMERABLE_PROJECT_RULE);
+                Program program = Programs.ofRules(ProjectCalcMergeRule.INSTANCE);
+                List<Program> rules = new ArrayList<Program>();
+                rules.add(program);
+                bld.programs(rules);
             } else if (t == PLANNER_TYPE.LOpt) {
 
             } else if (t == PLANNER_TYPE.RANDOM) {
@@ -80,7 +90,9 @@ public class QueryOptExperiment {
             } else {
                 assert false : "haven't implemented any other planner types yet";
             }
-            planners.add(Frameworks.getPlanner(bld.build()));
+            Planner planner = Frameworks.getPlanner(bld.build());
+            //planner.addRule(FilterMergeRule.INSTANCE);
+            planners.add(planner);
         }
 
         // load in the sql queries dataset
@@ -98,14 +110,13 @@ public class QueryOptExperiment {
                         continue;
                     };
                     // FIXME: parse the sql to avoid calcite errors.
-                    String escapedSql = sql;
+                    String escapedSql = queryRewriteForCalcite(sql);
                     allSqlQueries.add(escapedSql);
                 }
             }
         } else {
             assert false : "do not have any other dataset";
         }
-        System.out.println("generated experiment class!");
 	}
 
     private Frameworks.ConfigBuilder getDefaultFrameworkBuilder() throws
@@ -124,11 +135,13 @@ public class QueryOptExperiment {
 
         configBuilder.parserConfig(parserBuilder.build());
 
-		// TODO: potentially modify traitDefs as well
+		// FIXME: experimental stuff
         final List<RelTraitDef> traitDefs = new ArrayList<RelTraitDef>();
         traitDefs.add(ConventionTraitDef.INSTANCE);
+        //traitDefs.add(EnumerableConvention.INSTANCE);
         traitDefs.add(RelCollationTraitDef.INSTANCE);
         configBuilder.traitDefs(traitDefs);
+        configBuilder.context(Contexts.EMPTY_CONTEXT);
 
         return configBuilder;
     }
@@ -137,10 +150,14 @@ public class QueryOptExperiment {
      * statistics about each run.
      */
     public void run(ArrayList<String> queries) throws Exception {
+        int numSuccessfulQueries = 0;
+        int numFailedQueries = 0;
         for (String query : queries) {
-            System.out.println("new query");
+            //System.out.println(query);
             //query = "select * from name";
-            query = queryRewriteForCalcite(query);
+            //query = "select * from name join aka_name on name.name = aka_name.name";
+            query = "select * from cast_info join role_type on cast_info.role_id = role_type.id join person_info on person_info.id = cast_info.id";
+            if (numSuccessfulQueries == 1) break;
 			for (Planner planner : planners) {
                 RelNode node = null;
                 try {
@@ -149,38 +166,71 @@ public class QueryOptExperiment {
                     SqlNode validatedSqlNode = planner.validate(sqlNode);
                     node = planner.rel(validatedSqlNode).project();
                 } catch (SqlParseException e) {
+                    numFailedQueries += 1;
                     System.out.println(e);
                     System.out.println("failed to parse: " + query);
-                    System.exit(-1);
+                    continue;
+                    //System.exit(-1);
                 } catch (ValidationException e) {
+                    numFailedQueries += 1;
                     System.out.println(e);
                     System.out.println("failed to validate: " + query);
-                    System.exit(-1);
+                    continue;
+                    //System.exit(-1);
                 } catch (Exception e) {
+                    numFailedQueries += 1;
                     System.out.println(e);
                     System.out.println("failed in getting Relnode from  " + query);
-                    System.exit(-1);
+                    continue;
+                    //System.exit(-1);
                 }
 
                 RelMetadataQuery mq = RelMetadataQuery.instance();
 				RelOptCost unoptCost = mq.getNonCumulativeCost(node);
 				System.out.println("non optimized cost is: " + unoptCost);
-
-				System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+                System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
 				/// very important to do the replace EnumerableConvention thing
 				RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+                try {
+                    RelNode transform = planner.transform(0, traitSet, node);
+                    HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
+                    HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+                    hepPlanner.setRoot(node);
+                    //hepPlanner.addRule(FilterMergeRule.INSTANCE);
+                    //hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
+                    for (RelOptRule rule : Programs.RULE_SET) {
+                        hepPlanner.addRule(rule);
+                    }
+                    hepPlanner.changeTraits(node, traitSet);
+                    RelNode hepTransform = hepPlanner.findBestExp();
 
-				RelNode transform = planner.transform(0, traitSet, node);
-				System.out.println(RelOptUtil.dumpPlan("optimized plan:", transform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
-				System.out.println("optimized cost is: " + mq.getNonCumulativeCost(transform));
+                    System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
+                    System.out.println("optimized cost is: " + mq.getNonCumulativeCost(hepTransform));
+
+
+                    System.out.println(RelOptUtil.dumpPlan("optimized plan:", transform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
+                    System.out.println("optimized cost is: " + mq.getNonCumulativeCost(transform));
+                } catch (Exception e) {
+                    numFailedQueries += 1;
+                    System.out.println(e);
+                    System.out.println(e.getStackTrace());
+                    continue;
+                }
+                //System.out.println("SUCCESSFULLY GOT THE QUERY!!");
+                numSuccessfulQueries += 1;
                 planner.close();
                 planner.reset();
             }
         }
+        System.out.println("numSuccessfulQueries = " + numSuccessfulQueries);
+        System.out.println("numFailedQueries = " + numFailedQueries);
     }
 
+    // FIXME: need to ensure this works fine in all cases.
     private String queryRewriteForCalcite(String query) {
+        //System.out.println("original query: " + query);
         String newQuery = query.replace(";", "");
+        //System.out.println("rewritten query: " + newQuery);
         return newQuery;
     }
 }
