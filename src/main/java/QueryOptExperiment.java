@@ -98,7 +98,9 @@ public class QueryOptExperiment {
             } else {
                 assert false : "haven't implemented any other planner types yet";
             }
-            Planner planner = Frameworks.getPlanner(bld.build());
+            FrameworkConfig cfg = bld.build();
+            System.out.println("cost Factory: " + cfg.getCostFactory());
+            Planner planner = Frameworks.getPlanner(cfg);
             planners.add(planner);
         }
 
@@ -151,6 +153,8 @@ public class QueryOptExperiment {
         traitDefs.add(RelCollationTraitDef.INSTANCE);
         configBuilder.traitDefs(traitDefs);
         configBuilder.context(Contexts.EMPTY_CONTEXT);
+
+        configBuilder.costFactory(TestCost.FACTORY);
 
         return configBuilder;
     }
