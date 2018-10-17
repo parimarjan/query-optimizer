@@ -14,9 +14,8 @@ class Main {
 		System.out.println("starting query processing");
         List<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
         // TODO: add command line flags for these
-        plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
-        //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
-
+        //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
+        plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
         QueryOptExperiment exp = null;
         try {
             exp = new QueryOptExperiment("jdbc:calcite:model=test-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB);
