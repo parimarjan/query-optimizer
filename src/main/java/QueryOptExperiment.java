@@ -24,12 +24,12 @@ import org.apache.commons.io.FileUtils;
  */
 public class QueryOptExperiment {
 
-	private CalciteConnection conn;
+    private CalciteConnection conn;
 
-	public enum PLANNER_TYPE
+    public enum PLANNER_TYPE
     {
         EXHAUSTIVE,
-	    LOpt,
+        LOpt,
         RANDOM,
         DQ;
 
@@ -40,13 +40,13 @@ public class QueryOptExperiment {
         // we add JoinCommutRule + JoinPushThroughJoinRule +
         // JoinAssociateRule, then we should get exhaustive search.
         // This makes sense.
-	    public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
+        public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
             ImmutableList.of(JoinCommuteRule.INSTANCE,
                     JoinAssociateRule.INSTANCE,
                     JoinPushThroughJoinRule.RIGHT,
                     JoinPushThroughJoinRule.LEFT);
 
-	    public static final ImmutableList<RelOptRule> LOPT_RULES =
+        public static final ImmutableList<RelOptRule> LOPT_RULES =
             ImmutableList.of(LoptOptimizeJoinRule.INSTANCE);
 
         // FIXME: not sure if we need to add other rules - like we
@@ -67,25 +67,25 @@ public class QueryOptExperiment {
     /* actual planners generated using the above rules */
     private ArrayList<Planner> planners;
 
-	public enum QUERIES_DATASET
+    public enum QUERIES_DATASET
     {
         JOB,
-	    SIMPLE;
-		public String getDatasetPath() {
-			switch(this){
-				case JOB:
-					return "./join-order-benchmark/";
-				case SIMPLE:
+        SIMPLE;
+        public String getDatasetPath() {
+            switch(this){
+                case JOB:
+                    return "./join-order-benchmark/";
+                case SIMPLE:
                     return "./simple-queries/";
-				default:
-					return "";
-			}
-		}
+                default:
+                    return "";
+            }
+        }
     }
 
     public ArrayList<String> allSqlQueries;
 
-	/*
+    /*
     *************************************************************************
     *************************************************************************
                                     Methods
@@ -93,14 +93,13 @@ public class QueryOptExperiment {
     *************************************************************************
     */
 
-	/* @dbUrl
+    /* @dbUrl
      * @plannerTypes
      * @dataset
-     *
      */
-	public QueryOptExperiment(String dbUrl, List<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
+    public QueryOptExperiment(String dbUrl, List<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
 
-		conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+        conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         planners = new ArrayList<Planner>();
         allSqlQueries = new ArrayList<String>();
 
@@ -128,10 +127,9 @@ public class QueryOptExperiment {
         File dir = new File(queries.getDatasetPath());
         File[] listOfFiles = dir.listFiles();
         for (File f : listOfFiles) {
-            //System.out.println(f.getName());
+            // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
             //if (f.getName().contains("10a.sql")) {
-            //if (f.getName().equals("10a.sql")) {
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -150,7 +148,7 @@ public class QueryOptExperiment {
         SQLException {
         // build a FrameworkConfig using defaults where values aren't required
         Frameworks.ConfigBuilder configBuilder = Frameworks.newConfigBuilder();
-		configBuilder.defaultSchema(conn.getRootSchema().getSubSchema(conn.getSchema()));
+        configBuilder.defaultSchema(conn.getRootSchema().getSubSchema(conn.getSchema()));
         SqlParser.ConfigBuilder parserBuilder = SqlParser.configBuilder();
         // now we can set it to avoid upper casing and stuff
         // It does not have postgres specific casing rules, but JAVA rules seem
@@ -166,7 +164,7 @@ public class QueryOptExperiment {
                                                 .build());
 
 
-		// FIXME: experimental stuff
+        // FIXME: experimental stuff
         final List<RelTraitDef> traitDefs = new ArrayList<RelTraitDef>();
         traitDefs.add(ConventionTraitDef.INSTANCE);
         //traitDefs.add(EnumerableConvention.INSTANCE);
@@ -185,7 +183,7 @@ public class QueryOptExperiment {
         int numFailedQueries = 0;
         for (String query : queries) {
             //System.out.println(query);
-			for (Planner planner : planners) {
+            for (Planner planner : planners) {
                 // doing this at the start because there are many possible exit
                 // points because of various failures.
                 planner.close();
@@ -217,22 +215,22 @@ public class QueryOptExperiment {
                 }
 
                 RelMetadataQuery mq = RelMetadataQuery.instance();
-				RelOptCost unoptCost = mq.getNonCumulativeCost(node);
-				System.out.println("non optimized cost is: " + unoptCost);
-                System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
-				/// very important to do the replace EnumerableConvention thing
-				RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+                RelOptCost unoptCost = mq.getNonCumulativeCost(node);
+                System.out.println("non optimized cost is: " + unoptCost);
+                System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+                /// very important to do the replace EnumerableConvention thing
+                RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
                 try {
-					//System.out.println("executing unoptimized node....");
+                    //System.out.println("executing unoptimized node....");
                     //executeNode(node);
-					//tryHepPlanner(node, traitSet, mq);
+                    //tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
                     long start = System.currentTimeMillis();
                     RelNode optimizedNode = planner.transform(0, traitSet, node);
                     System.out.println("planning time: " + (System.currentTimeMillis()- start));
 
-                    System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
+                    System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
                     System.out.println("optimized cost is: " + mq.getNonCumulativeCost(optimizedNode));
                     System.out.println("going to execute volcano optimized plan");
                     executeNode(optimizedNode);
@@ -251,32 +249,32 @@ public class QueryOptExperiment {
         System.out.println("numFailedQueries = " + numFailedQueries);
     }
 
-	private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq) {
+    private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq) {
         // testing out the volcano program builder
-		final HepProgram hep = new HepProgramBuilder()
-				.addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
-				.addMatchOrder(HepMatchOrder.BOTTOM_UP)
+        final HepProgram hep = new HepProgramBuilder()
+                .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+                .addMatchOrder(HepMatchOrder.BOTTOM_UP)
                 .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
                 .addRuleInstance(LoptOptimizeJoinRule.INSTANCE)
-				.build();
+                .build();
 
         // old attempt: did not have rule order / JoinToMultiJoinRule
-		//HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
-		//final HepProgram hep = hepProgramBuilder.build();
-		HepPlanner hepPlanner = new HepPlanner(hep);
-		hepPlanner.setRoot(node);
+        //HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
+        //final HepProgram hep = hepProgramBuilder.build();
+        HepPlanner hepPlanner = new HepPlanner(hep);
+        hepPlanner.setRoot(node);
         // TODO: does not look like adding rules here makes much difference,
         // just addRuleInstance on builder seems to work fine.
         // hepPlanner.addRule(FilterMergeRule.INSTANCE);
         //for (RelOptRule rule : Programs.RULE_SET) {
             //hepPlanner.addRule(rule);
         //}
-		//hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
-		hepPlanner.changeTraits(node, traitSet);
+        //hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
+        hepPlanner.changeTraits(node, traitSet);
 
-		for (RelOptRule rule : Programs.RULE_SET) {
-			hepPlanner.addRule(rule);
-		}
+        for (RelOptRule rule : Programs.RULE_SET) {
+            hepPlanner.addRule(rule);
+        }
         System.out.println("added all rules to HepPlanner");
 
         // TODO: metadata stuff. Doesn't seem to make a difference / be needed
@@ -293,8 +291,8 @@ public class QueryOptExperiment {
         System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
         System.out.println("optimized cost is: " + mq.getNonCumulativeCost(hepTransform));
         System.out.println("executing hep optimized node...");
-		executeNode(hepTransform);
-	}
+        executeNode(hepTransform);
+    }
 
     private void executeNode(RelNode node) {
         try {

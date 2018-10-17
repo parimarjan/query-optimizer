@@ -61,35 +61,35 @@ public class MyJoinUtils {
    * joins. Should be at least three to make sense to do the multijoin.
    */
   public static Program genJoinRule(
-	  final Iterable<? extends RelOptRule> rules,
-	  final int minJoinCount) {
+      final Iterable<? extends RelOptRule> rules,
+      final int minJoinCount) {
 
-	return (planner, rel, requiredOutputTraits, materializations, lattices) -> {
-	  requiredOutputTraits.replace(EnumerableConvention.INSTANCE);
-	  final int joinCount = RelOptUtil.countJoins(rel);
-	  final Program program;
-	  if (joinCount < minJoinCount) {
-		System.out.println("too few joins!");
-		program = Programs.ofRules(rules);
-	  } else {
-		// Create a program that gathers together joins as a MultiJoin.
+    return (planner, rel, requiredOutputTraits, materializations, lattices) -> {
+      requiredOutputTraits.replace(EnumerableConvention.INSTANCE);
+      final int joinCount = RelOptUtil.countJoins(rel);
+      final Program program;
+      if (joinCount < minJoinCount) {
+        System.out.println("too few joins!");
+        program = Programs.ofRules(rules);
+      } else {
+        // Create a program that gathers together joins as a MultiJoin.
         // Note: this is important to let the LoptOptimizeJoinRule fire later.
-		final HepProgram hep = new HepProgramBuilder()
+        final HepProgram hep = new HepProgramBuilder()
             .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
             .addMatchOrder(HepMatchOrder.BOTTOM_UP)
             //.addRuleInstance(JoinToMultiJoinRule.INSTANCE)
-			.build();
-		final Program program1 =
-			Programs.of(hep, false, DefaultRelMetadataProvider.INSTANCE);
+            .build();
+        final Program program1 =
+            Programs.of(hep, false, DefaultRelMetadataProvider.INSTANCE);
 
-		// Create a program that contains a rule to expand a MultiJoin
-		// into heuristically ordered joins.
-		final List<RelOptRule> list = Lists.newArrayList(rules);
-		final Program program2 = Programs.ofRules(list);
-		program = Programs.sequence(program1, program2);
-	  }
-	  return program.run(
-		  planner, rel, requiredOutputTraits, materializations, lattices);
-	};
+        // Create a program that contains a rule to expand a MultiJoin
+        // into heuristically ordered joins.
+        final List<RelOptRule> list = Lists.newArrayList(rules);
+        final Program program2 = Programs.ofRules(list);
+        program = Programs.sequence(program1, program2);
+      }
+      return program.run(
+          planner, rel, requiredOutputTraits, materializations, lattices);
+    };
   }
 }
