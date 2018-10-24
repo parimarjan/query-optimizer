@@ -97,6 +97,15 @@ public class LoptJoinOrderTest extends RelOptRule {
 
     findRemovableOuterJoins(mq, multiJoin);
 
+    //List<ImmutableBitSet> projFields = multiJoinRel.getProjFields();
+    //for (ImmutableBitSet bS : projFields) {
+      //if (bS != null) {
+        //for (Integer i : bS) {
+          //System.out.println(i);
+        //}
+      //} else System.out.println("bs was null!");
+    //}
+
 /// different clusters of the join graph? is there only one cluster?
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
 ///// PN: this is confusing ----> figure out its use for us.

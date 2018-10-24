@@ -67,8 +67,12 @@ public class QueryOptExperiment {
         public static final ImmutableList<RelOptRule> BUSHY_RULES =
             ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE);
 
-        public static final ImmutableList<RelOptRule> RL_RULES =
-            ImmutableList.of(RLJoinOrderRule.INSTANCE);
+				// Note: need the second projection rule as otherwise the optimized
+				// node from the joins was projecting all the fields before projecting it down to
+				// only the selected fields
+				public static final ImmutableList<RelOptRule> RL_RULES = ImmutableList.of(
+						RLJoinOrderRule.INSTANCE,
+						ProjectMergeRule.INSTANCE);
 
         // FIXME: not sure if we need to add other rules - like we
         // could add all of the Programs.RULE_SET here, and remove the
@@ -129,6 +133,8 @@ public class QueryOptExperiment {
     public QueryOptExperiment(String dbUrl, List<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
 
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+        //exploreTables(conn);
+
         planners = new ArrayList<Planner>();
         allSqlQueries = new ArrayList<String>();
 
@@ -158,7 +164,6 @@ public class QueryOptExperiment {
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
-            //if (f.getName().contains("10a.sql")) {
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -256,6 +261,8 @@ public class QueryOptExperiment {
                 try {
                     //System.out.println("executing unoptimized node....");
                     //executeNode(node);
+
+                    // FIXME: check if this might actually be working now.
                     //tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
@@ -378,5 +385,29 @@ public class QueryOptExperiment {
         String newQuery = query.replace(";", "");
         newQuery = newQuery.replace("!=", "<>");
         return newQuery;
+    }
+
+    private void exploreTables(CalciteConnection conn) throws SQLException {
+      DatabaseMetaData md = conn.getMetaData();
+      String types[] = {"TABLE"};
+      ResultSet tables = md.getTables(null, null, "%", types);
+      System.out.println("tables are: ");
+      int tableCount = 0;
+      int attrCount = 0;
+      while (tables.next()) {
+        tableCount+=1;
+        //System.out.println(tables.getString(3));
+        String tableName = tables.getString(3);
+        /* find all the attributes of this table */
+        ResultSet attrs = md.getColumns(null, null, tableName, "%");
+        System.out.println("attributes are: ");
+        while (attrs.next()) {
+          attrCount += 1;
+          System.out.println("table name is: " + attrs.getString(3));
+          System.out.println("attribute name is: " + attrs.getString(4));
+        }
+      }
+      System.out.println("num tables are: " + tableCount);
+      System.out.println("num attrs are: " + attrCount);
     }
 }

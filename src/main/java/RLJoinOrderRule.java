@@ -97,27 +97,26 @@ public class RLJoinOrderRule extends RelOptRule {
     final RelMetadataQuery mq = call.getMetadataQuery();
 
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
+    // TODO: experimental extraction of fields
+    List<ImmutableBitSet> projFields = multiJoinRel.getProjFields();
+    for (ImmutableBitSet bS : projFields) {
+      if (bS != null) {
+        for (Integer i : bS) {
+          System.out.println(i);
+        }
+      } else System.out.println("bs was null!");
+    }
 
     final List<Vertex> vertexes = new ArrayList<>();
-/// PN: LeafVertex is just the data sources?
+    /// PN: LeafVertex is just the data sources?
     int x = 0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
-      RelOptTable tbl = rel.getTable();
-      if (tbl != null) {
-        List<String> tblNames = tbl.getQualifiedName();
-
-        for (String s : tblNames) {
-          System.out.println(i + "th' table name is: " + s);
-        }
-      } else System.out.println("table was null");
-
       double cost = mq.getRowCount(rel);
       vertexes.add(new LeafVertex(i, rel, cost, x));
       x += rel.getRowType().getFieldCount();
     }
-    System.exit(-1);
 
     assert x == multiJoin.getNumTotalFields();
 
@@ -318,7 +317,7 @@ public class RLJoinOrderRule extends RelOptRule {
       }
     }
 
-/// just adding a projection on top of the left nodes we had.
+    /// just adding a projection on top of the left nodes we had.
     final Pair<RelNode, Mappings.TargetMapping> top = Util.last(relNodes);
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
