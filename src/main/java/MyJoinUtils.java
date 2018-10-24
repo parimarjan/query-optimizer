@@ -77,7 +77,7 @@ public class MyJoinUtils {
         final HepProgram hep = new HepProgramBuilder()
             .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
             .addMatchOrder(HepMatchOrder.BOTTOM_UP)
-            //.addRuleInstance(JoinToMultiJoinRule.INSTANCE)
+            .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
             .build();
         final Program program1 =
             Programs.of(hep, false, DefaultRelMetadataProvider.INSTANCE);

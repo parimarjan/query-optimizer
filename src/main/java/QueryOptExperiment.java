@@ -19,6 +19,12 @@ import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.commons.io.FileUtils;
 
+// experimental:
+import org.apache.calcite.rel.core.CorrelationId;
+import org.apache.calcite.rel.logical.*;
+//import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.*;
+
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
@@ -31,6 +37,9 @@ public class QueryOptExperiment {
         EXHAUSTIVE,
         LOpt,
         RANDOM,
+        DEBUG,
+        BUSHY,
+        RL,
         DQ;
 
         // using com.google.ImmutableList because we can't declare ArrayList in
@@ -49,6 +58,18 @@ public class QueryOptExperiment {
         public static final ImmutableList<RelOptRule> LOPT_RULES =
             ImmutableList.of(LoptOptimizeJoinRule.INSTANCE);
 
+        public static final ImmutableList<RelOptRule> RANDOM_RULES =
+            ImmutableList.of(JoinOrderTest.INSTANCE);
+
+        public static final ImmutableList<RelOptRule> DEBUG_RULES =
+            ImmutableList.of(LoptJoinOrderTest.INSTANCE);
+
+        public static final ImmutableList<RelOptRule> BUSHY_RULES =
+            ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE);
+
+        public static final ImmutableList<RelOptRule> RL_RULES =
+            ImmutableList.of(RLJoinOrderRule.INSTANCE);
+
         // FIXME: not sure if we need to add other rules - like we
         // could add all of the Programs.RULE_SET here, and remove the
         // exhaustive rules above (that was done in heuristicJoinOrder)
@@ -59,6 +80,14 @@ public class QueryOptExperiment {
                     return EXHAUSTIVE_RULES;
                 case LOpt:
                     return LOPT_RULES;
+                case RANDOM:
+                    return RANDOM_RULES;
+                case DEBUG:
+                    return DEBUG_RULES;
+                case BUSHY:
+                    return BUSHY_RULES;
+                case RL:
+                    return RL_RULES;
                 default:
                     return null;
             }
@@ -113,12 +142,12 @@ public class QueryOptExperiment {
                 List<Program> rules = new ArrayList<Program>();
                 rules.add(program);
                 bld.programs(rules);
-
             } else {
                 // probably same statement can work with all types.
-                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
+                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
+                // FIXME temporary:
+                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
             }
-
             Planner planner = Frameworks.getPlanner(bld.build());
             planners.add(planner);
         }
@@ -183,6 +212,7 @@ public class QueryOptExperiment {
         int numFailedQueries = 0;
         for (String query : queries) {
             //System.out.println(query);
+            //if (numSuccessfulQueries == 1 || numFailedQueries == 1) break;
             for (Planner planner : planners) {
                 // doing this at the start because there are many possible exit
                 // points because of various failures.
@@ -214,10 +244,13 @@ public class QueryOptExperiment {
                     //System.exit(-1);
                 }
 
+                //printInfo(node);
+
                 RelMetadataQuery mq = RelMetadataQuery.instance();
-                RelOptCost unoptCost = mq.getNonCumulativeCost(node);
-                System.out.println("non optimized cost is: " + unoptCost);
-                System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+                RelOptCost unoptCost = mq.getCumulativeCost(node);
+                System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
+                System.out.println("non optimized cumulative cost is: " + unoptCost);
+                //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
                 /// very important to do the replace EnumerableConvention thing
                 RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
                 try {
@@ -227,19 +260,27 @@ public class QueryOptExperiment {
 
                     // using the default volcano planner.
                     long start = System.currentTimeMillis();
-                    RelNode optimizedNode = planner.transform(0, traitSet, node);
-                    System.out.println("planning time: " + (System.currentTimeMillis()- start));
+                    RelNode optimizedNode = planner.transform(0, traitSet,
+                            node);
+                    System.out.println("printing optimized node info");
+                    //printInfo(optimizedNode);
+                    System.out.println("planning time: " +
+                                (System.currentTimeMillis()- start));
+                    System.out.println("optimized toString is: " +
+                            RelOptUtil.toString(optimizedNode));
 
-                    System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                    System.out.println("optimized cost is: " + mq.getNonCumulativeCost(optimizedNode));
-                    System.out.println("going to execute volcano optimized plan");
-                    executeNode(optimizedNode);
+                    //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+                    System.out.println("optimized cost is: " + mq.getCumulativeCost(optimizedNode));
+                    System.out.println("not executing the node!");
+                    //System.out.println("going to execute volcano optimized plan");
+                    //executeNode(optimizedNode);
 
                 } catch (Exception e) {
                     numFailedQueries += 1;
                     System.out.println(e);
                     System.out.println(e.getStackTrace());
-                    continue;
+                    throw e;
+                    //continue;
                 }
                 //System.out.println("SUCCESSFULLY GOT THE QUERY!!");
                 numSuccessfulQueries += 1;
@@ -275,7 +316,6 @@ public class QueryOptExperiment {
         for (RelOptRule rule : Programs.RULE_SET) {
             hepPlanner.addRule(rule);
         }
-        System.out.println("added all rules to HepPlanner");
 
         // TODO: metadata stuff. Doesn't seem to make a difference / be needed
         // right now.
@@ -311,9 +351,30 @@ public class QueryOptExperiment {
         }
     }
 
+    private void printInfo(RelNode node) {
+        Set<CorrelationId> setIds = node.getVariablesSet();
+        System.out.println("num setIds: " + setIds.size());
+
+        System.out.println("rel instance: " + node.getClass().getName());
+        //System.out.println("rel convention: " + node.getConvention());
+        //System.out.println("rel query: " + node.getQuery());
+        //System.out.println(RelOptUtil.toString(node));
+        System.out.println("digest: " + node.recomputeDigest());
+        RelDataType dt = node.getRowType();
+        System.out.println("dt.toString: " + dt.toString());
+
+        if (node instanceof LogicalJoin) {
+            LogicalJoin lnode = (LogicalJoin) node;
+            System.out.println("systemFieldList size: " + lnode.getSystemFieldList().size());
+        }
+
+        for (RelNode inp : node.getInputs()) {
+            printInfo(inp);
+        }
+    }
+
     // FIXME: need to ensure this works fine in all cases.
     private String queryRewriteForCalcite(String query) {
-        //System.out.println("original query: " + query);
         String newQuery = query.replace(";", "");
         newQuery = newQuery.replace("!=", "<>");
         return newQuery;
