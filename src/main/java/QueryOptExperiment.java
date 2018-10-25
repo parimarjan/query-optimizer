@@ -163,7 +163,8 @@ public class QueryOptExperiment {
         File[] listOfFiles = dir.listFiles();
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
-            if (f.getName().contains(".sql")) {
+            //if (f.getName().contains(".sql")) {
+            if (f.getName().contains("3.sql")) {
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -239,8 +240,8 @@ public class QueryOptExperiment {
                     numFailedQueries += 1;
                     System.out.println(e);
                     System.out.println("failed to validate: " + query);
+                    //throw e;
                     continue;
-                    //System.exit(-1);
                 } catch (Exception e) {
                     numFailedQueries += 1;
                     System.out.println(e);
@@ -248,22 +249,22 @@ public class QueryOptExperiment {
                     continue;
                     //System.exit(-1);
                 }
-
-                //printInfo(node);
-
+                printInfo(node);
+                System.exit(-1);
                 RelMetadataQuery mq = RelMetadataQuery.instance();
                 RelOptCost unoptCost = mq.getCumulativeCost(node);
                 System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-                System.out.println("non optimized cumulative cost is: " + unoptCost);
+                System.out.println("unoptimized cost is: " + unoptCost);
                 //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
                 /// very important to do the replace EnumerableConvention thing
                 RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
                 try {
-                    //System.out.println("executing unoptimized node....");
-                    //executeNode(node);
+                    // Note: executing the unoptimized node here results in a
+                    // planning error when trying to optimize it later.
+                    // executeNode(node);
 
                     // FIXME: check if this might actually be working now.
-                    //tryHepPlanner(node, traitSet, mq);
+                    tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
                     long start = System.currentTimeMillis();
@@ -277,7 +278,7 @@ public class QueryOptExperiment {
                             RelOptUtil.toString(optimizedNode));
 
                     //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                    System.out.println("optimized cost is: " + mq.getCumulativeCost(optimizedNode));
+                    System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
                     System.out.println("not executing the node!");
                     //System.out.println("going to execute volcano optimized plan");
                     //executeNode(optimizedNode);
@@ -303,7 +304,8 @@ public class QueryOptExperiment {
                 .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
                 .addMatchOrder(HepMatchOrder.BOTTOM_UP)
                 .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
-                .addRuleInstance(LoptOptimizeJoinRule.INSTANCE)
+                .addRuleInstance(RLJoinOrderRule.INSTANCE)
+                //.addRuleInstance(LoptOptimizeJoinRule.INSTANCE)
                 .build();
 
         // old attempt: did not have rule order / JoinToMultiJoinRule
@@ -314,15 +316,9 @@ public class QueryOptExperiment {
         // TODO: does not look like adding rules here makes much difference,
         // just addRuleInstance on builder seems to work fine.
         // hepPlanner.addRule(FilterMergeRule.INSTANCE);
-        //for (RelOptRule rule : Programs.RULE_SET) {
-            //hepPlanner.addRule(rule);
-        //}
-        //hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
         hepPlanner.changeTraits(node, traitSet);
-
-        for (RelOptRule rule : Programs.RULE_SET) {
-            hepPlanner.addRule(rule);
-        }
+        hepPlanner.addRule(RLJoinOrderRule.INSTANCE);
+        hepPlanner.addRule(ProjectMergeRule.INSTANCE);
 
         // TODO: metadata stuff. Doesn't seem to make a difference / be needed
         // right now.
@@ -335,10 +331,13 @@ public class QueryOptExperiment {
         //node.accept(new MetaDataProviderModifier(cachingMetaDataProvider));
 
         RelNode hepTransform = hepPlanner.findBestExp();
-        System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
-        System.out.println("optimized cost is: " + mq.getNonCumulativeCost(hepTransform));
-        System.out.println("executing hep optimized node...");
-        executeNode(hepTransform);
+        //System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
+
+        System.out.println("hep optimized toString is: " +
+            RelOptUtil.toString(hepTransform));
+        System.out.println("hep optimized cost is: " + mq.getCumulativeCost(hepTransform));
+        //System.out.println("executing hep optimized node...");
+        //executeNode(hepTransform);
     }
 
     private void executeNode(RelNode node) {
@@ -347,10 +346,19 @@ public class QueryOptExperiment {
             PreparedStatement ps = runner.prepare(node);
             System.out.println("executing node");
             long start = System.currentTimeMillis();
-            ResultSet res2 = ps.executeQuery();
+            ResultSet res = ps.executeQuery();
             long end = System.currentTimeMillis();
             long total = end - start;
             System.out.println("execution time: " + total);
+            int curLine = 0;
+						while (res.next()) {
+              System.out.println(res.getString(1));
+              curLine += 1;
+              if (curLine >= 10) {
+                break;
+              }
+            }
+
         } catch (SQLException e) {
             System.out.println("caught exeception while executing query");
             System.out.println(e);
@@ -361,10 +369,9 @@ public class QueryOptExperiment {
     private void printInfo(RelNode node) {
         Set<CorrelationId> setIds = node.getVariablesSet();
         System.out.println("num setIds: " + setIds.size());
-
-        System.out.println("rel instance: " + node.getClass().getName());
-        //System.out.println("rel convention: " + node.getConvention());
-        //System.out.println("rel query: " + node.getQuery());
+        System.out.println("rel class: " + node.getClass().getName());
+        System.out.println("rel convention: " + node.getConvention());
+        System.out.println("rel query class: " + node.getQuery().getClass().getName());
         //System.out.println(RelOptUtil.toString(node));
         System.out.println("digest: " + node.recomputeDigest());
         RelDataType dt = node.getRowType();
@@ -374,8 +381,8 @@ public class QueryOptExperiment {
             LogicalJoin lnode = (LogicalJoin) node;
             System.out.println("systemFieldList size: " + lnode.getSystemFieldList().size());
         }
-
         for (RelNode inp : node.getInputs()) {
+            System.out.println("next input");
             printInfo(inp);
         }
     }
@@ -384,6 +391,12 @@ public class QueryOptExperiment {
     private String queryRewriteForCalcite(String query) {
         String newQuery = query.replace(";", "");
         newQuery = newQuery.replace("!=", "<>");
+        // debugging purposes
+        // FIXME: doesn't seem easy to add text here without running into
+        // weird formatting issues (while it works just fine if we write the
+        // same thing in the original queries)
+        //newQuery = "\"explain\" " + newQuery;
+        //newQuery = newQuery + " LIMIT 10";
         return newQuery;
     }
 

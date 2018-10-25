@@ -49,7 +49,7 @@ import java.util.Set;
  * Utility class that keeps track of the join factors that
  * make up a {@link MultiJoin}.
  */
-public class LoptMultiJoin2 {
+public class LoptMultiJoin2 extends LoptMultiJoin {
   //~ Instance fields --------------------------------------------------------
 
   /**
