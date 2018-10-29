@@ -36,6 +36,7 @@ public class QueryOptExperiment {
 
     public enum PLANNER_TYPE
     {
+        ORIG_JOIN_ORDER,
         EXHAUSTIVE,
         LOpt,
         RANDOM,
@@ -46,6 +47,9 @@ public class QueryOptExperiment {
 
         // using com.google.ImmutableList because we can't declare ArrayList in
         // static context.
+        public static final ImmutableList<RelOptRule> ORIG_JOIN_ORDER_RULES =
+            ImmutableList.of(FilterJoinRule.FILTER_ON_JOIN,
+						        ProjectMergeRule.INSTANCE);
 
         // according to comments in Programs.heuristicJoinOrder, if
         // we add JoinCommutRule + JoinPushThroughJoinRule +
@@ -55,10 +59,14 @@ public class QueryOptExperiment {
             ImmutableList.of(JoinCommuteRule.INSTANCE,
                     JoinAssociateRule.INSTANCE,
                     JoinPushThroughJoinRule.RIGHT,
-                    JoinPushThroughJoinRule.LEFT);
+                    JoinPushThroughJoinRule.LEFT,
+                    FilterJoinRule.FILTER_ON_JOIN,
+						        ProjectMergeRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
-            ImmutableList.of(LoptOptimizeJoinRule.INSTANCE);
+            ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
+                            FilterJoinRule.FILTER_ON_JOIN,
+                            ProjectMergeRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> RANDOM_RULES =
             ImmutableList.of(JoinOrderTest.INSTANCE);
@@ -81,33 +89,39 @@ public class QueryOptExperiment {
         // exhaustive rules above (that was done in heuristicJoinOrder)
 
         public ImmutableList<RelOptRule> getRules() {
-            switch(this){
-                case EXHAUSTIVE:
-                    return EXHAUSTIVE_RULES;
-                case LOpt:
-                    return LOPT_RULES;
-                case RANDOM:
-                    return RANDOM_RULES;
-                case DEBUG:
-                    return DEBUG_RULES;
-                case BUSHY:
-                    return BUSHY_RULES;
-                case RL:
-                    return RL_RULES;
-                default:
-                    return null;
-            }
+          switch(this){
+            case ORIG_JOIN_ORDER:
+              return ORIG_JOIN_ORDER_RULES;
+            case EXHAUSTIVE:
+              return EXHAUSTIVE_RULES;
+            case LOpt:
+              return LOPT_RULES;
+            case RANDOM:
+              return RANDOM_RULES;
+            case DEBUG:
+              return DEBUG_RULES;
+            case BUSHY:
+              return BUSHY_RULES;
+            case RL:
+              return RL_RULES;
+            default:
+              return null;
+          }
         }
     }
-    /* actual planners generated using the above rules */
-    private ArrayList<Planner> planners;
+    /* actual volcanoPlanners generated using the above rules */
+    private ArrayList<Planner> volcanoPlanners;
+    //private ArrayList<Planner> hepPlanners;
 
     public enum QUERIES_DATASET
     {
         JOB,
+        ORIG_JOB,
         SIMPLE;
         public String getDatasetPath() {
             switch(this){
+                case ORIG_JOB:
+                    return "./orig-join-order-benchmark/";
                 case JOB:
                     return "./join-order-benchmark/";
                 case SIMPLE:
@@ -137,13 +151,13 @@ public class QueryOptExperiment {
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
 
-        planners = new ArrayList<Planner>();
+        volcanoPlanners = new ArrayList<Planner>();
         allSqlQueries = new ArrayList<String>();
 
-        // Initialize all the planners we should need
+        // Initialize all the volcanoPlanners we should need
         for (PLANNER_TYPE t  : plannerTypes) {
             Frameworks.ConfigBuilder bld = getDefaultFrameworkBuilder();
-            if (t == PLANNER_TYPE.EXHAUSTIVE) {
+            if (t == PLANNER_TYPE.EXHAUSTIVE || t == PLANNER_TYPE.ORIG_JOIN_ORDER) {
                 // TODO: probably can use the same function as other cases too
                 // and skip multijoin in genJoinRule.
                 Program program = Programs.ofRules(t.getRules());
@@ -152,12 +166,12 @@ public class QueryOptExperiment {
                 bld.programs(rules);
             } else {
                 // probably same statement can work with all types.
-                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
+                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
                 // FIXME temporary:
-                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
+                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
             }
             Planner planner = Frameworks.getPlanner(bld.build());
-            planners.add(planner);
+            volcanoPlanners.add(planner);
         }
 
         // load in the sql queries dataset
@@ -181,7 +195,7 @@ public class QueryOptExperiment {
         }
     }
 
-    /* Runs all the planners we have on all the given allSqlQueries, and collects
+    /* Runs all the volcanoPlanners we have on all the given allSqlQueries, and collects
      * statistics about each run.
      */
     public void run(ArrayList<String> queries) throws Exception {
@@ -190,7 +204,10 @@ public class QueryOptExperiment {
         for (String query : queries) {
             //System.out.println(query);
             //if (numSuccessfulQueries == 1 || numFailedQueries == 1) break;
-            for (Planner planner : planners) {
+            int plannerNum = 0;
+            for (Planner planner : volcanoPlanners) {
+                System.out.println("planner num = " + plannerNum);
+                plannerNum += 1;
                 // doing this at the start because there are many possible exit
                 // points because of various failures.
                 planner.close();
@@ -238,19 +255,19 @@ public class QueryOptExperiment {
                     // executeNode(node);
 
                     // FIXME: check if this might actually be working now.
-                    tryHepPlanner(node, traitSet, mq);
+                    //tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
-                    //long start = System.currentTimeMillis();
-                    //RelNode optimizedNode = planner.transform(0, traitSet,
-                            //node);
+                    long start = System.currentTimeMillis();
+                    RelNode optimizedNode = planner.transform(0, traitSet,
+                            node);
                     //System.out.println("printing optimized node info");
                     //System.out.println("optimized toString is: " +
                             //RelOptUtil.toString(optimizedNode));
                     //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                    //System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
-                    //System.out.println("planning time: " +
-                                //(System.currentTimeMillis()- start));
+                    System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
+                    System.out.println("planning time: " +
+                                (System.currentTimeMillis()- start));
 
                     //executeNode(optimizedNode);
 
@@ -301,7 +318,7 @@ public class QueryOptExperiment {
     }
 
     private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq) {
-        // testing out the volcano program builder
+        // all of these rules are really important to get any performance
         final HepProgram hep = new HepProgramBuilder()
                 .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
                 .addMatchOrder(HepMatchOrder.BOTTOM_UP)
@@ -342,12 +359,14 @@ public class QueryOptExperiment {
             RelOptUtil.toString(hepTransform));
         System.out.println("hep optimized cost is: " + mq.getCumulativeCost(hepTransform));
         //System.out.println("executing hep optimized node...");
-        //executeNode(hepTransform);
+        executeNode(hepTransform);
     }
 
     private void executeNode(RelNode node) {
         try {
+            System.out.println("in execute node!");
             RelRunner runner = conn.unwrap(RelRunner.class);
+            System.out.println("after conn.unwrap!");
             PreparedStatement ps = runner.prepare(node);
             System.out.println("executing node");
             long start = System.currentTimeMillis();
@@ -355,14 +374,14 @@ public class QueryOptExperiment {
             long end = System.currentTimeMillis();
             long total = end - start;
             System.out.println("execution time: " + total);
-            int curLine = 0;
-						while (res.next()) {
-              System.out.println(res.getString(1));
-              curLine += 1;
-              if (curLine >= 10) {
-                break;
-              }
-            }
+            //int curLine = 0;
+						//while (res.next()) {
+              //System.out.println(res.getString(1));
+              //curLine += 1;
+              //if (curLine >= 10) {
+                //break;
+              //}
+            //}
 
         } catch (SQLException e) {
             System.out.println("caught exeception while executing query");
