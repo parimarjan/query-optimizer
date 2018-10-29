@@ -1,6 +1,7 @@
 import java.sql.*;
 import java.util.*;
 import org.apache.calcite.rel.*;
+import org.apache.calcite.rex.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.tools.*;
 import java.io.*;
@@ -24,6 +25,7 @@ import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.logical.*;
 //import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.*;
+import org.apache.calcite.util.ImmutableBitSet;
 
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
@@ -133,7 +135,7 @@ public class QueryOptExperiment {
     public QueryOptExperiment(String dbUrl, List<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
 
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
-        //exploreTables(conn);
+        DbInfo.init(conn);
 
         planners = new ArrayList<Planner>();
         allSqlQueries = new ArrayList<String>();
@@ -163,8 +165,8 @@ public class QueryOptExperiment {
         File[] listOfFiles = dir.listFiles();
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
-            //if (f.getName().contains(".sql")) {
-            if (f.getName().contains("3.sql")) {
+            if (f.getName().contains(".sql")) {
+            //if (f.getName().contains("3.sql")) {
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -177,37 +179,6 @@ public class QueryOptExperiment {
                 allSqlQueries.add(escapedSql);
             }
         }
-    }
-
-    private Frameworks.ConfigBuilder getDefaultFrameworkBuilder() throws
-        SQLException {
-        // build a FrameworkConfig using defaults where values aren't required
-        Frameworks.ConfigBuilder configBuilder = Frameworks.newConfigBuilder();
-        configBuilder.defaultSchema(conn.getRootSchema().getSubSchema(conn.getSchema()));
-        SqlParser.ConfigBuilder parserBuilder = SqlParser.configBuilder();
-        // now we can set it to avoid upper casing and stuff
-        // It does not have postgres specific casing rules, but JAVA rules seem
-        // most sensible, and works with parsing the queries we got.
-        //parserBuilder.setQuotedCasing(Lex.JAVA.quotedCasing)
-                     //.setUnquotedCasing(Lex.JAVA.unquotedCasing)
-                     //.setQuoting(Lex.JAVA.quoting)
-                     //.setCaseSensitive(Lex.JAVA.caseSensitive);
-        //configBuilder.parserConfig(parserBuilder.build());
-
-        configBuilder.parserConfig(SqlParser.configBuilder()
-                                    .setLex(Lex.MYSQL)
-                                                .build());
-
-
-        // FIXME: experimental stuff
-        final List<RelTraitDef> traitDefs = new ArrayList<RelTraitDef>();
-        traitDefs.add(ConventionTraitDef.INSTANCE);
-        //traitDefs.add(EnumerableConvention.INSTANCE);
-        traitDefs.add(RelCollationTraitDef.INSTANCE);
-        configBuilder.traitDefs(traitDefs);
-        configBuilder.context(Contexts.EMPTY_CONTEXT);
-
-        return configBuilder;
     }
 
     /* Runs all the planners we have on all the given allSqlQueries, and collects
@@ -249,8 +220,12 @@ public class QueryOptExperiment {
                     continue;
                     //System.exit(-1);
                 }
-                printInfo(node);
-                System.exit(-1);
+                //printInfo(node);
+                DbInfo.setCurrentQueryVisibleFeatures(node);
+                // testing if features were set correctly
+                ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
+                System.out.println("DQ features are: " + bs);
+
                 RelMetadataQuery mq = RelMetadataQuery.instance();
                 RelOptCost unoptCost = mq.getCumulativeCost(node);
                 System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
@@ -264,7 +239,7 @@ public class QueryOptExperiment {
                     // executeNode(node);
 
                     // FIXME: check if this might actually be working now.
-                    tryHepPlanner(node, traitSet, mq);
+                    //tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
                     long start = System.currentTimeMillis();
@@ -281,7 +256,7 @@ public class QueryOptExperiment {
                     System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
                     System.out.println("not executing the node!");
                     //System.out.println("going to execute volcano optimized plan");
-                    //executeNode(optimizedNode);
+                    executeNode(optimizedNode);
 
                 } catch (Exception e) {
                     numFailedQueries += 1;
@@ -296,6 +271,37 @@ public class QueryOptExperiment {
         }
         System.out.println("numSuccessfulQueries = " + numSuccessfulQueries);
         System.out.println("numFailedQueries = " + numFailedQueries);
+    }
+
+    private Frameworks.ConfigBuilder getDefaultFrameworkBuilder() throws
+        SQLException {
+        // build a FrameworkConfig using defaults where values aren't required
+        Frameworks.ConfigBuilder configBuilder = Frameworks.newConfigBuilder();
+        configBuilder.defaultSchema(conn.getRootSchema().getSubSchema(conn.getSchema()));
+        SqlParser.ConfigBuilder parserBuilder = SqlParser.configBuilder();
+        // now we can set it to avoid upper casing and stuff
+        // It does not have postgres specific casing rules, but JAVA rules seem
+        // most sensible, and works with parsing the queries we got.
+        //parserBuilder.setQuotedCasing(Lex.JAVA.quotedCasing)
+                     //.setUnquotedCasing(Lex.JAVA.unquotedCasing)
+                     //.setQuoting(Lex.JAVA.quoting)
+                     //.setCaseSensitive(Lex.JAVA.caseSensitive);
+        //configBuilder.parserConfig(parserBuilder.build());
+
+        configBuilder.parserConfig(SqlParser.configBuilder()
+                                    .setLex(Lex.MYSQL)
+                                                .build());
+
+
+        // FIXME: experimental stuff
+        final List<RelTraitDef> traitDefs = new ArrayList<RelTraitDef>();
+        traitDefs.add(ConventionTraitDef.INSTANCE);
+        //traitDefs.add(EnumerableConvention.INSTANCE);
+        traitDefs.add(RelCollationTraitDef.INSTANCE);
+        configBuilder.traitDefs(traitDefs);
+        configBuilder.context(Contexts.EMPTY_CONTEXT);
+
+        return configBuilder;
     }
 
     private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq) {
@@ -398,29 +404,5 @@ public class QueryOptExperiment {
         //newQuery = "\"explain\" " + newQuery;
         //newQuery = newQuery + " LIMIT 10";
         return newQuery;
-    }
-
-    private void exploreTables(CalciteConnection conn) throws SQLException {
-      DatabaseMetaData md = conn.getMetaData();
-      String types[] = {"TABLE"};
-      ResultSet tables = md.getTables(null, null, "%", types);
-      System.out.println("tables are: ");
-      int tableCount = 0;
-      int attrCount = 0;
-      while (tables.next()) {
-        tableCount+=1;
-        //System.out.println(tables.getString(3));
-        String tableName = tables.getString(3);
-        /* find all the attributes of this table */
-        ResultSet attrs = md.getColumns(null, null, tableName, "%");
-        System.out.println("attributes are: ");
-        while (attrs.next()) {
-          attrCount += 1;
-          System.out.println("table name is: " + attrs.getString(3));
-          System.out.println("attribute name is: " + attrs.getString(4));
-        }
-      }
-      System.out.println("num tables are: " + tableCount);
-      System.out.println("num attrs are: " + attrCount);
     }
 }

@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
@@ -44,6 +45,10 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.apache.calcite.util.mapping.Mappings.TargetMapping;
+
+// new ones
+import org.apache.calcite.plan.volcano.*;
+import org.apache.calcite.rel.core.*;
 
 // experimental
 import org.apache.calcite.plan.RelOptUtil;
@@ -84,6 +89,25 @@ public class RLJoinOrderRule extends RelOptRule {
     super(operand(MultiJoin.class, any()), relBuilderFactory, null);
   }
 
+  private void printStuff(RelNode rel) {
+    if (rel == null) {
+      System.out.println("rel was null");
+      return;
+    }
+    System.out.println("rel class: " + rel.getClass().getName());
+    System.out.println("digest: " + rel.recomputeDigest());
+    if (rel instanceof RelSubset) {
+      RelSubset s = (RelSubset) rel;
+      printStuff(s.getOriginal());
+    } else if (rel instanceof Filter) {
+      System.out.println("filter!");
+      printStuff(rel.getInput(0));
+    } else if (rel instanceof TableScan) {
+      System.out.println("table scan!");
+      System.out.println("table name: " + rel.getTable().getQualifiedName());
+    }
+  }
+
   @Deprecated // to be removed before 2.0
   public RLJoinOrderRule(RelFactories.JoinFactory joinFactory,
       RelFactories.ProjectFactory projectFactory) {
@@ -95,23 +119,13 @@ public class RLJoinOrderRule extends RelOptRule {
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
     final RelMetadataQuery mq = call.getMetadataQuery();
-
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
-    // TODO: experimental extraction of fields
-    List<ImmutableBitSet> projFields = multiJoinRel.getProjFields();
-    for (ImmutableBitSet bS : projFields) {
-      if (bS != null) {
-        for (Integer i : bS) {
-          System.out.println(i);
-        }
-      } else System.out.println("bs was null!");
-    }
-
     final List<Vertex> vertexes = new ArrayList<>();
-    /// PN: LeafVertex is just the data sources?
     int x = 0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
+      // String tableName = MyUtils.getTableName(rel);
+      // System.out.println("table name: " + tableName);
       // this is a vertex, so must be one of the tables from the database
       double cost = mq.getRowCount(rel);
       vertexes.add(new LeafVertex(i, rel, cost, x));
@@ -122,7 +136,7 @@ public class RLJoinOrderRule extends RelOptRule {
 
     final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
     for (RexNode node : multiJoin.getJoinFilters()) {
-      unusedEdges.add(multiJoin.createEdge(node));
+      unusedEdges.add(multiJoin.createEdge2(node));
     }
 
     /// TODO: test other costs here.
@@ -146,23 +160,31 @@ public class RLJoinOrderRule extends RelOptRule {
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     for (;;) {
       //final int edgeOrdinal = chooseBestEdge(unusedEdges, edgeComparator);
+
+      // each edge is equivalent to a possible action, and must be represented
+      // by its features
+      System.out.println("new iteration!");
+      for (LoptMultiJoin2.Edge edge : unusedEdges) {
+        ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
+        System.out.println("edge features = " + features);
+      }
+
       /// Test out a random strategy.
       final int edgeOrdinal;
       if (unusedEdges.size() >= 1) {
         edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
       } else edgeOrdinal = -1;
 
-// PN: printouts might be very helpful.
       if (pw != null) {
         trace(vertexes, unusedEdges, usedEdges, edgeOrdinal, pw);
       }
       final int[] factors;
       if (edgeOrdinal == -1) {
+        // PN: check, when does this happen?
         // No more edges. Are there any un-joined vertexes?
         final Vertex lastVertex = Util.last(vertexes);
         final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
         if (z < 0) {
-// PN: only time we exit from the for
           break;
         }
         factors = new int[] {z, lastVertex.id};
@@ -177,8 +199,6 @@ public class RLJoinOrderRule extends RelOptRule {
         assert bestEdge.factors.cardinality() == 2;
         factors = bestEdge.factors.toArray();
       }
-/// Let RL do the stuff above this loop. After this, the next steps
-///should probably be the same?
 
       // Determine which factor is to be on the LHS of the join.
       final int majorFactor;
@@ -190,16 +210,11 @@ public class RLJoinOrderRule extends RelOptRule {
         majorFactor = factors[1];
         minorFactor = factors[0];
       }
-/// aren't these ever removed from vertexes?
-/// maybe because we are adding the appropriate edges to usedEdges, then
-/// we might not need to remove?
+
       final Vertex majorVertex = vertexes.get(majorFactor);
       final Vertex minorVertex = vertexes.get(minorFactor);
-
-
-      // Find the join conditions. All conditions whose factors are now all in
-      // the join can now be used.
-/// FIXME: what does .set(v) do?
+      // set v ensures that the new vertex we are creating will be added to the
+      // factors of the new vertex.
       final int v = vertexes.size();
       final ImmutableBitSet newFactors =
           majorVertex.factors
@@ -208,10 +223,18 @@ public class RLJoinOrderRule extends RelOptRule {
               .set(v)
               .build();
 
+      final ImmutableBitSet newFeatures =
+          majorVertex.visibleFeatures
+              .rebuild()
+              .addAll(minorVertex.visibleFeatures)
+              .build();
+
+      // PN: ideally, the RL agent should know all these join conditions
+      // already when choosing a join right?
+      // Find the join conditions. All conditions whose factors are now all in
+      // the join can now be used.
       final List<RexNode> conditions = new ArrayList<>();
       final Iterator<LoptMultiJoin2.Edge> edgeIterator = unusedEdges.iterator();
-/// Note: based on the edge we chose, we might be removing a few other
-/// edges from the graph as well.
       while (edgeIterator.hasNext()) {
         LoptMultiJoin2.Edge edge = edgeIterator.next();
         if (newFactors.contains(edge.factors)) {
@@ -221,8 +244,7 @@ public class RLJoinOrderRule extends RelOptRule {
         }
       }
 
-/// cost that we will send back to the RL agent?
-/// TODO: experiment with using other cost formulas here.
+      /// TODO: experiment with using other cost formulas here.
       double cost =
           majorVertex.cost
           * minorVertex.cost
@@ -230,10 +252,8 @@ public class RLJoinOrderRule extends RelOptRule {
               RexUtil.composeConjunction(rexBuilder, conditions, false));
       final Vertex newVertex =
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
-              cost, ImmutableList.copyOf(conditions));
+              cost, ImmutableList.copyOf(conditions), newFeatures);
       vertexes.add(newVertex);
-
-/// PN: we might not care for this since we are letting RL handle it?
 
       // Re-compute selectivity of edges above the one just chosen.
       // Suppose that we just chose the edge between "product" (10k rows) and
@@ -262,16 +282,15 @@ public class RLJoinOrderRule extends RelOptRule {
       }
     }
 
-/// we could have also started constructing the partial RelNode's while the
-/// optimization above was going on --> would let us use
-/// node.computeSelfCost. But probably can get that functionality some other
-/// way too.
+    /// we could have also started constructing the partial RelNode's while the
+    /// optimization above was going on --> would let us use
+    /// node.computeSelfCost. But probably can get that functionality some other
+    /// way too.
 
     // We have a winner!
     List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
     for (Vertex vertex : vertexes) {
       if (vertex instanceof LeafVertex) {
-/// don't need to make a join decision here I guess?
         LeafVertex leafVertex = (LeafVertex) vertex;
         final Mappings.TargetMapping mapping =
             Mappings.offsetSource(
@@ -300,7 +319,10 @@ public class RLJoinOrderRule extends RelOptRule {
           pw.println("combined: " + mapping);
           pw.println();
         }
-/// shuttle, woot?
+        // TODO: what is the use of this shuttle + mappings here?
+        // TODO: examine condition before / after the modifications to see
+        // whats up. Seems to be making sure that the ids are mapped to the
+        // correct ones.
         final RexVisitor<RexNode> shuttle =
             new RexPermuteInputsShuttle(mapping, left, right);
         final RexNode condition =
@@ -380,6 +402,8 @@ public class RLJoinOrderRule extends RelOptRule {
 
     protected final ImmutableBitSet factors;
     final double cost;
+    // one hot features based on the DQ paper
+    public ImmutableBitSet visibleFeatures;
 
     Vertex(int id, ImmutableBitSet factors, double cost) {
       this.id = id;
@@ -397,6 +421,15 @@ public class RLJoinOrderRule extends RelOptRule {
       super(id, ImmutableBitSet.of(id), cost);
       this.rel = rel;
       this.fieldOffset = fieldOffset;
+      //initialize visibleFeatures with all the bits in the range turned on
+			ImmutableBitSet.Builder visibleFeaturesBuilder = ImmutableBitSet.builder();
+      int fieldCount = rel.getRowType().getFieldCount();
+			for (int i = fieldOffset; i < fieldOffset+fieldCount; i++) {
+        // TODO: decide if we should set this or not depending on the topmost
+        // projection
+				visibleFeaturesBuilder.set(i);
+			}
+			visibleFeatures = visibleFeaturesBuilder.build();
     }
 
     @Override public String toString() {
@@ -404,6 +437,7 @@ public class RLJoinOrderRule extends RelOptRule {
           + ", cost: " + Util.human(cost)
           + ", factors: " + factors
           + ", fieldOffset: " + fieldOffset
+          + ", visibleFeatures: " + visibleFeatures
           + ")";
     }
   }
@@ -417,11 +451,12 @@ public class RLJoinOrderRule extends RelOptRule {
     final ImmutableList<RexNode> conditions;
 
     JoinVertex(int id, int leftFactor, int rightFactor, ImmutableBitSet factors,
-        double cost, ImmutableList<RexNode> conditions) {
+        double cost, ImmutableList<RexNode> conditions, ImmutableBitSet visibleFeatures) {
       super(id, factors, cost);
       this.leftFactor = leftFactor;
       this.rightFactor = rightFactor;
       this.conditions = Objects.requireNonNull(conditions);
+      this.visibleFeatures = visibleFeatures;
     }
 
     @Override public String toString() {
@@ -430,8 +465,47 @@ public class RLJoinOrderRule extends RelOptRule {
           + ", factors: " + factors
           + ", leftFactor: " + leftFactor
           + ", rightFactor: " + rightFactor
+          + ", visibleFeatures: " + visibleFeatures
           + ")";
     }
+  }
+
+  // features based on the DQ paper corresponding to a single edge.
+  private ImmutableBitSet getDQFeatures(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
+      ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
+
+      System.out.println(edge);
+      System.out.println(vertexes);
+
+      allPossibleFeaturesBuilder.addAll(edge.columns);
+
+      List<Integer> factors = edge.factors.toList();
+      for (Integer factor : factors) {
+        System.out.println("factor = " + factor);
+        Vertex v = vertexes.get(factor);
+        if (v == null) {
+          System.out.println("v was null!");
+          System.exit(-1);
+        }
+        if (v.visibleFeatures == null) {
+          System.out.println("visible features was null!");
+          System.out.println(v);
+          System.exit(-1);
+        }
+        allPossibleFeaturesBuilder.addAll(v.visibleFeatures);
+      }
+      ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
+      // intersect this with the features present in the complete query.
+      ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
+      queryFeatures = allPossibleFeatures.intersect(queryFeatures);
+      System.out.println("queryFeatures = " + queryFeatures);
+      // now we want to embed these into the features representing all the
+      // attributes of this workload.
+      ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
+      for (Integer i : queryFeatures) {
+        featuresBuilder.set(mj.mapToDatabase.get(i));
+      }
+      return featuresBuilder.build();
   }
 }
 
