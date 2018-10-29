@@ -82,7 +82,8 @@ public class RLJoinOrderRule extends RelOptRule {
       new RLJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
   // TODO: just set this to what we want.
-  private final PrintWriter pw = Util.printWriter(System.out);
+  //private final PrintWriter pw = Util.printWriter(System.out);
+  private final PrintWriter pw = null;
 
   /** Creates an RLJoinOrderRule. */
   public RLJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -115,6 +116,7 @@ public class RLJoinOrderRule extends RelOptRule {
   }
 
   @Override public void onMatch(RelOptRuleCall call) {
+    //System.out.println("onMatch");
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
@@ -163,10 +165,9 @@ public class RLJoinOrderRule extends RelOptRule {
 
       // each edge is equivalent to a possible action, and must be represented
       // by its features
-      System.out.println("new iteration!");
       for (LoptMultiJoin2.Edge edge : unusedEdges) {
         ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
-        System.out.println("edge features = " + features);
+        //System.out.println("edge features = " + features);
       }
 
       /// Test out a random strategy.
@@ -474,14 +475,11 @@ public class RLJoinOrderRule extends RelOptRule {
   private ImmutableBitSet getDQFeatures(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
       ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
 
-      System.out.println(edge);
-      System.out.println(vertexes);
-
       allPossibleFeaturesBuilder.addAll(edge.columns);
 
       List<Integer> factors = edge.factors.toList();
       for (Integer factor : factors) {
-        System.out.println("factor = " + factor);
+        //System.out.println("factor = " + factor);
         Vertex v = vertexes.get(factor);
         if (v == null) {
           System.out.println("v was null!");
@@ -498,7 +496,7 @@ public class RLJoinOrderRule extends RelOptRule {
       // intersect this with the features present in the complete query.
       ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
       queryFeatures = allPossibleFeatures.intersect(queryFeatures);
-      System.out.println("queryFeatures = " + queryFeatures);
+      //System.out.println("queryFeatures = " + queryFeatures);
       // now we want to embed these into the features representing all the
       // attributes of this workload.
       ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();

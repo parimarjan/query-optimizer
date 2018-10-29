@@ -22,7 +22,7 @@ public class DbInfo {
     DatabaseMetaData md = conn.getMetaData();
     String types[] = {"TABLE"};
     ResultSet tables = md.getTables(null, null, "%", types);
-    System.out.println("tables are: ");
+    //System.out.println("tables are: ");
     //int tableCount = 0;
     int attrCount = 0;
     while (tables.next()) {

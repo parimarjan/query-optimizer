@@ -198,7 +198,7 @@ public class QueryOptExperiment {
                 RelNode node = null;
                 try {
                     SqlNode sqlNode = planner.parse(query);
-                    System.out.println(sqlNode);
+                    //System.out.println(sqlNode);
                     SqlNode validatedSqlNode = planner.validate(sqlNode);
                     node = planner.rel(validatedSqlNode).project();
                 } catch (SqlParseException e) {
@@ -220,15 +220,14 @@ public class QueryOptExperiment {
                     continue;
                     //System.exit(-1);
                 }
-                //printInfo(node);
                 DbInfo.setCurrentQueryVisibleFeatures(node);
                 // testing if features were set correctly
                 ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
-                System.out.println("DQ features are: " + bs);
+                //System.out.println("DQ features are: " + bs);
 
                 RelMetadataQuery mq = RelMetadataQuery.instance();
                 RelOptCost unoptCost = mq.getCumulativeCost(node);
-                System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
+                //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
                 System.out.println("unoptimized cost is: " + unoptCost);
                 //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
                 /// very important to do the replace EnumerableConvention thing
@@ -239,24 +238,21 @@ public class QueryOptExperiment {
                     // executeNode(node);
 
                     // FIXME: check if this might actually be working now.
-                    //tryHepPlanner(node, traitSet, mq);
+                    tryHepPlanner(node, traitSet, mq);
 
                     // using the default volcano planner.
-                    long start = System.currentTimeMillis();
-                    RelNode optimizedNode = planner.transform(0, traitSet,
-                            node);
-                    System.out.println("printing optimized node info");
-                    //printInfo(optimizedNode);
-                    System.out.println("planning time: " +
-                                (System.currentTimeMillis()- start));
-                    System.out.println("optimized toString is: " +
-                            RelOptUtil.toString(optimizedNode));
-
+                    //long start = System.currentTimeMillis();
+                    //RelNode optimizedNode = planner.transform(0, traitSet,
+                            //node);
+                    //System.out.println("printing optimized node info");
+                    //System.out.println("optimized toString is: " +
+                            //RelOptUtil.toString(optimizedNode));
                     //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                    System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
-                    System.out.println("not executing the node!");
-                    //System.out.println("going to execute volcano optimized plan");
-                    executeNode(optimizedNode);
+                    //System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
+                    //System.out.println("planning time: " +
+                                //(System.currentTimeMillis()- start));
+
+                    //executeNode(optimizedNode);
 
                 } catch (Exception e) {
                     numFailedQueries += 1;
@@ -311,7 +307,7 @@ public class QueryOptExperiment {
                 .addMatchOrder(HepMatchOrder.BOTTOM_UP)
                 .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
                 .addRuleInstance(RLJoinOrderRule.INSTANCE)
-                //.addRuleInstance(LoptOptimizeJoinRule.INSTANCE)
+                .addRuleInstance(ProjectMergeRule.INSTANCE)
                 .build();
 
         // old attempt: did not have rule order / JoinToMultiJoinRule
@@ -323,8 +319,8 @@ public class QueryOptExperiment {
         // just addRuleInstance on builder seems to work fine.
         // hepPlanner.addRule(FilterMergeRule.INSTANCE);
         hepPlanner.changeTraits(node, traitSet);
-        hepPlanner.addRule(RLJoinOrderRule.INSTANCE);
-        hepPlanner.addRule(ProjectMergeRule.INSTANCE);
+        //hepPlanner.addRule(RLJoinOrderRule.INSTANCE);
+        //hepPlanner.addRule(ProjectMergeRule.INSTANCE);
 
         // TODO: metadata stuff. Doesn't seem to make a difference / be needed
         // right now.
@@ -336,7 +332,10 @@ public class QueryOptExperiment {
         //final RelMetadataProvider cachingMetaDataProvider = new CachingRelMetadataProvider(ChainedRelMetadataProvider.of(list), hepPlanner);
         //node.accept(new MetaDataProviderModifier(cachingMetaDataProvider));
 
+        long start = System.currentTimeMillis();
         RelNode hepTransform = hepPlanner.findBestExp();
+        System.out.println("planning time: " + (System.currentTimeMillis()-
+              start));
         //System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
 
         System.out.println("hep optimized toString is: " +

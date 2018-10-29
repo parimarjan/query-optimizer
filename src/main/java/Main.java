@@ -16,8 +16,8 @@ class Main {
         List<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
         // TODO: should we make this part of the QueryOptExp class or just have
         // it separate?
-        ZeroMQServer.init();
-        TimeUnit.SECONDS.sleep(15);
+        //ZeroMQServer.init();
+        //TimeUnit.SECONDS.sleep(15);
         // TODO: add command line flags for these
         //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
         //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
@@ -27,7 +27,7 @@ class Main {
         plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RL);
         QueryOptExperiment exp = null;
         try {
-            exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.SIMPLE);
+            exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB);
         } catch (Exception e) {
             System.err.println("Sql Exception!");
             throw e;
