@@ -1,6 +1,7 @@
 import java.util.*;
 import java.sql.*;
 import java.sql.SQLException;
+import java.util.concurrent.TimeUnit;
 
 class Main {
 
@@ -13,6 +14,10 @@ class Main {
     public static void main(String[] args) throws Exception {
         System.out.println("starting query processing");
         List<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
+        // TODO: should we make this part of the QueryOptExp class or just have
+        // it separate?
+        ZeroMQServer.init();
+        TimeUnit.SECONDS.sleep(15);
         // TODO: add command line flags for these
         //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
         //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
