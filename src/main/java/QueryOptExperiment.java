@@ -19,6 +19,7 @@ import org.apache.calcite.adapter.jdbc.JdbcSchema;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.commons.io.FileUtils;
+import java.util.concurrent.ThreadLocalRandom;
 
 // experimental:
 import org.apache.calcite.rel.core.CorrelationId;
@@ -133,6 +134,7 @@ public class QueryOptExperiment {
     }
 
     public ArrayList<String> allSqlQueries;
+    public static ZeroMQServer zmq;
 
     /*
     *************************************************************************
@@ -195,8 +197,8 @@ public class QueryOptExperiment {
         }
     }
 
-    /* Runs all the volcanoPlanners we have on all the given allSqlQueries, and collects
-     * statistics about each run.
+    /* Runs all the volcanoPlanners we have on all the given allSqlQueries, and
+     * collects statistics about each run.
      */
     public void run(ArrayList<String> queries) throws Exception {
         int numSuccessfulQueries = 0;
@@ -204,90 +206,127 @@ public class QueryOptExperiment {
         for (String query : queries) {
             //System.out.println(query);
             //if (numSuccessfulQueries == 1 || numFailedQueries == 1) break;
-            int plannerNum = 0;
             for (Planner planner : volcanoPlanners) {
-                System.out.println("planner num = " + plannerNum);
-                plannerNum += 1;
-                // doing this at the start because there are many possible exit
-                // points because of various failures.
-                planner.close();
-                planner.reset();
-                RelNode node = null;
-                try {
-                    SqlNode sqlNode = planner.parse(query);
-                    //System.out.println(sqlNode);
-                    SqlNode validatedSqlNode = planner.validate(sqlNode);
-                    node = planner.rel(validatedSqlNode).project();
-                } catch (SqlParseException e) {
-                    numFailedQueries += 1;
-                    System.out.println(e);
-                    System.out.println("failed to parse: " + query);
-                    continue;
-                    //System.exit(-1);
-                } catch (ValidationException e) {
-                    numFailedQueries += 1;
-                    System.out.println(e);
-                    System.out.println("failed to validate: " + query);
-                    //throw e;
-                    continue;
-                } catch (Exception e) {
-                    numFailedQueries += 1;
-                    System.out.println(e);
-                    System.out.println("failed in getting Relnode from  " + query);
-                    continue;
-                    //System.exit(-1);
-                }
-                DbInfo.setCurrentQueryVisibleFeatures(node);
-                // testing if features were set correctly
-                ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
-                //System.out.println("DQ features are: " + bs);
-
-                RelMetadataQuery mq = RelMetadataQuery.instance();
-                RelOptCost unoptCost = mq.getCumulativeCost(node);
-                //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-                System.out.println("unoptimized cost is: " + unoptCost);
-                //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                /// very important to do the replace EnumerableConvention thing
-                RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
-                try {
-                    // Note: executing the unoptimized node here results in a
-                    // planning error when trying to optimize it later.
-                    // executeNode(node);
-
-                    // FIXME: check if this might actually be working now.
-                    //tryHepPlanner(node, traitSet, mq);
-
-                    // using the default volcano planner.
-                    long start = System.currentTimeMillis();
-                    RelNode optimizedNode = planner.transform(0, traitSet,
-                            node);
-                    //System.out.println("printing optimized node info");
-                    //System.out.println("optimized toString is: " +
-                            //RelOptUtil.toString(optimizedNode));
-                    //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-                    System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
-                    System.out.println("planning time: " +
-                                (System.currentTimeMillis()- start));
-
-                    //executeNode(optimizedNode);
-
-                } catch (Exception e) {
-                    numFailedQueries += 1;
-                    System.out.println(e);
-                    System.out.println(e.getStackTrace());
-                    throw e;
-                    //continue;
-                }
-                //System.out.println("SUCCESSFULLY GOT THE QUERY!!");
+              if (planAndExecuteQuery(query, planner)) {
                 numSuccessfulQueries += 1;
+              } else numFailedQueries += 1;
             }
         }
         System.out.println("numSuccessfulQueries = " + numSuccessfulQueries);
         System.out.println("numFailedQueries = " + numFailedQueries);
     }
 
+    /* This function will act as zeromq server controlled by an agent on the
+     * client side (currently an RL agent in Python), using standard openAI gym
+     * semantics.
+     */
+    public void train(ArrayList<String> queries) throws Exception
+    {
+      // we will treat queries as a pool of sample data. After every reset, we
+      // choose a new
+      int numSuccessfulQueries = 0;
+      int numFailedQueries = 0;
+      // start a server, and wait for a command.
+      //ZeroMQServer.init();
+      zmq = new ZeroMQServer();
+      //zmq.waitForClientTill("getNumAttrs");
+      while (true) {
+        // basically wait for reset every time.
+        zmq.waitForClientTill("reset");
+        // FIXME: add a way to make it possible to send end command.
+
+        // should always call reset for next query.
+        //assert cmd.equals("reset");
+        // pick a random query for this episode
+        int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        System.out.println("query num = " + nextQuery);
+        zmq.reset = false;
+        String query = queries.get(nextQuery);
+        System.out.println(query);
+        for (Planner planner : volcanoPlanners) {
+          boolean success = planAndExecuteQuery(query, planner);
+          if (!success) {
+            System.out.println("failed in query " + nextQuery);
+          }
+        }
+      }
+    }
+
+    public static ZeroMQServer getZMQServer() {
+      return zmq;
+    }
+
+    private boolean planAndExecuteQuery(String query, Planner planner)
+      throws Exception
+    {
+        // doing this at the start because there are many possible exit
+        // points because of various failures.
+        planner.close();
+        planner.reset();
+        RelNode node = null;
+        try {
+            SqlNode sqlNode = planner.parse(query);
+            //System.out.println(sqlNode);
+            SqlNode validatedSqlNode = planner.validate(sqlNode);
+            node = planner.rel(validatedSqlNode).project();
+        } catch (SqlParseException e) {
+            System.out.println(e);
+            System.out.println("failed to parse: " + query);
+            return false;
+            // throw e;
+        } catch (ValidationException e) {
+            System.out.println(e);
+            System.out.println("failed to validate: " + query);
+            return false;
+            //throw e;
+        } catch (Exception e) {
+            System.out.println(e);
+            System.out.println("failed in getting Relnode from  " + query);
+            return false;
+            //System.exit(-1);
+        }
+        DbInfo.setCurrentQueryVisibleFeatures(node);
+        // testing if features were set correctly
+        ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
+        //System.out.println("DQ features are: " + bs);
+
+        RelMetadataQuery mq = RelMetadataQuery.instance();
+        RelOptCost unoptCost = mq.getCumulativeCost(node);
+        //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
+        System.out.println("unoptimized cost is: " + unoptCost);
+        //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        /// very important to do the replace EnumerableConvention thing
+        RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+        try {
+            // FIXME: check if this might actually be working now.
+            //tryHepPlanner(node, traitSet, mq);
+
+            // using the default volcano planner.
+            long start = System.currentTimeMillis();
+            RelNode optimizedNode = planner.transform(0, traitSet,
+                    node);
+            //System.out.println("optimized toString is: " +
+                    //RelOptUtil.toString(optimizedNode));
+            //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+            System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
+            System.out.println("planning time: " + (System.currentTimeMillis()-
+                  start));
+
+            //executeNode(optimizedNode);
+
+        } catch (Exception e) {
+            // it is useful to throw the error here to see what went wrong..
+            throw e;
+            //System.out.println(e);
+            //System.out.println(e.getStackTrace());
+            //return false;
+        }
+        return true;
+    }
+
     private Frameworks.ConfigBuilder getDefaultFrameworkBuilder() throws
-        SQLException {
+        SQLException
+        {
         // build a FrameworkConfig using defaults where values aren't required
         Frameworks.ConfigBuilder configBuilder = Frameworks.newConfigBuilder();
         configBuilder.defaultSchema(conn.getRootSchema().getSubSchema(conn.getSchema()));

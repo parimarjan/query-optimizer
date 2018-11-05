@@ -14,6 +14,7 @@ public class DbInfo {
   /* each table is mapped to its offset in the feature map */
   private static HashMap<String, Integer> tableFeaturesOffsetMap;
   private static ImmutableBitSet curVisibleFeatures = null;
+  public static int attrCount;
 
   public static void init(CalciteConnection conn) throws SQLException {
     // Let's map each table to its offset in a one-hot feature encoding
@@ -24,7 +25,7 @@ public class DbInfo {
     ResultSet tables = md.getTables(null, null, "%", types);
     //System.out.println("tables are: ");
     //int tableCount = 0;
-    int attrCount = 0;
+    attrCount = 0;
     while (tables.next()) {
       String tableName = tables.getString(3);
       tableFeaturesOffsetMap.put(tableName, attrCount);

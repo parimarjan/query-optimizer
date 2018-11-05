@@ -117,6 +117,8 @@ public class RLJoinOrderRule extends RelOptRule {
 
   @Override public void onMatch(RelOptRuleCall call) {
     //System.out.println("onMatch");
+    ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
+
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
@@ -159,23 +161,40 @@ public class RLJoinOrderRule extends RelOptRule {
           }
         };
 
+    // In general, we can keep updating it after every edge collapse, although
+    // it shouldn't change for the way DQ featurized.
+    zmq.state = new ArrayList<Integer>(DbInfo.getCurrentQueryVisibleFeatures().toList());
+
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     for (;;) {
       //final int edgeOrdinal = chooseBestEdge(unusedEdges, edgeComparator);
 
       // each edge is equivalent to a possible action, and must be represented
       // by its features
-      for (LoptMultiJoin2.Edge edge : unusedEdges) {
-        ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
-        //System.out.println("edge features = " + features);
-      }
 
-      /// Test out a random strategy.
       final int edgeOrdinal;
       if (unusedEdges.size() >= 1) {
-        edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
-      } else edgeOrdinal = -1;
+        ArrayList<ArrayList<Integer>> actionFeatures = new ArrayList<ArrayList<Integer>>();
+        for (LoptMultiJoin2.Edge edge : unusedEdges) {
+          ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
+          //System.out.println("edge features = " + features);
+          actionFeatures.add(new ArrayList<Integer>(features.toList()));
+        }
+        zmq.actions = actionFeatures;
+        zmq.waitForClientTill("step");
+        if (!zmq.reset) {
+          edgeOrdinal = zmq.nextAction;
+          System.out.println("successfully set up next ACTION!");
+        } else {
+          System.out.println("next action was chosen randomly");
+          // Test out a random strategy.
+          edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
+        }
+      } else {
+        edgeOrdinal = -1;
+      }
 
+      // ask for the edge we should choose from the python agent
       if (pw != null) {
         trace(vertexes, unusedEdges, usedEdges, edgeOrdinal, pw);
       }
@@ -255,6 +274,9 @@ public class RLJoinOrderRule extends RelOptRule {
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
               cost, ImmutableList.copyOf(conditions), newFeatures);
       vertexes.add(newVertex);
+      System.out.println("new cost is: " + cost);
+      // treat this as the reward signal.
+      zmq.lastReward = -cost;
 
       // Re-compute selectivity of edges above the one just chosen.
       // Suppose that we just chose the edge between "product" (10k rows) and
@@ -281,6 +303,13 @@ public class RLJoinOrderRule extends RelOptRule {
           unusedEdges.set(i, newEdge);
         }
       }
+      // is this the reight place to return results of the previous action?
+      // FIXME: not sure if we need to do anything else in this scenario?
+      if (unusedEdges.size() == 0) {
+        System.out.println("setting episodeDone to true!!!!");
+        zmq.episodeDone = 1;
+      } else zmq.episodeDone = 0;
+      zmq.waitForClientTill("getReward");
     }
 
     /// we could have also started constructing the partial RelNode's while the
@@ -474,9 +503,7 @@ public class RLJoinOrderRule extends RelOptRule {
   // features based on the DQ paper corresponding to a single edge.
   private ImmutableBitSet getDQFeatures(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
       ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
-
       allPossibleFeaturesBuilder.addAll(edge.columns);
-
       List<Integer> factors = edge.factors.toList();
       for (Integer factor : factors) {
         //System.out.println("factor = " + factor);
@@ -490,7 +517,9 @@ public class RLJoinOrderRule extends RelOptRule {
           System.out.println(v);
           System.exit(-1);
         }
-        allPossibleFeaturesBuilder.addAll(v.visibleFeatures);
+        // FIXME: commenting this so we have only join condition features on
+        // each edge.
+        // allPossibleFeaturesBuilder.addAll(v.visibleFeatures);
       }
       ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
       // intersect this with the features present in the complete query.

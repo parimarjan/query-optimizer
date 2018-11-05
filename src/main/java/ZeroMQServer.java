@@ -1,34 +1,135 @@
-//
-//  Hello World server in Java
-//  Binds REP socket to tcp://*:5555
-//  Expects "Hello" from client, replies with "World"
-//
-
 import org.zeromq.ZMQ;
+import org.apache.calcite.util.ImmutableBitSet;
+import java.io.Serializable;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.*;
+
+// FIXME: generalize this enough to handle different feature / state
+// representations.
 
 public class ZeroMQServer {
 
-    public static void init() throws Exception {
-        ZMQ.Context context = ZMQ.context(1);
+  // ZMQ stuff for communication
+  private ZMQ.Context context;
+  private ZMQ.Socket responder;
 
-        //  Socket to talk to clients
-        ZMQ.Socket responder = context.socket(ZMQ.REP);
-        responder.bind("tcp://*:5555");
+  // Internal state for the query planning environment. Here, I just assume
+  // that everything is very serial, so the states should be appropriated
+  // updated whenever someone asks for it.
+  public int episodeNum = 0;
+  public int nextAction = -1;
+  public boolean reset = false;
+  public int episodeDone = 0;
+  public double lastReward = 0;
 
-        while (!Thread.currentThread().isInterrupted()) {
-            // Wait for next request from the client
-            byte[] request = responder.recv(0);
-            System.out.println("Received " + new String (request));
+  public Serializable state;
+  public Serializable actions;
 
-            // Do some 'work'
-            Thread.sleep(1000);
+  public ZeroMQServer() {
+    // don't need to do anything.
+  }
 
-            // Send reply back to client
-            String reply = "World";
-            responder.send(reply.getBytes(), 0);
-        }
-        responder.close();
-        context.term();
+  public void init() throws Exception {
+      context = ZMQ.context(ZMQ.REP);
+      responder = context.socket(ZMQ.REP);
+      responder.bind("tcp://*:5555");
+  }
+
+  public void close() {
+      responder.close();
+      context.term();
+  }
+
+  // returns the command string sent by the client.
+  public String waitForCommand() throws Exception {
+    // FIXME: is it bad to reset the connection every time?
+    init();
+    System.out.println("java server waiting for a command");
+    String msg;
+    byte[] request = responder.recv(0);
+    msg = new String(request);
+    System.out.println("Received " + msg);
+    Serializable resp = null;
+    // this will be set to true ONLY after reset has been called.
+    reset = false;
+    switch (msg)
+    {
+      case "reset":
+        episodeNum = 0;
+        reset = true;
+        // don't need to send any reply here.
+        resp = "";
+        break;
+      case "getActions":
+        resp = actions;
+        break;
+      case "getState":
+        resp = state;
+        break;
+      case "end":
+        resp = "";
+        break;
+      case "step":
+        // here we might need to do a bunch of things to get all the feedback.
+        resp = "";
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        String action = new String(request);
+        nextAction = Integer.parseInt(action);
+        System.out.println("received action: " + nextAction);
+        break;
+      case "getReward":
+        resp = lastReward;
+        break;
+      case "isDone":
+        resp = episodeDone;
+        break;
+      default:
+        close();
+        return msg;
     }
+
+    // Based on the message, decide what we may need to reply.
+    //String reply = "World";
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		ObjectOutput out = null;
+    //System.out.println(resp);
+		try {
+      // FIXME: can also write out bytes like this, but it was a pain to deserialize
+      // in python.
+			//out = new ObjectOutputStream(bos);
+			//out.writeObject(resp);
+			//out.flush();
+			//byte[] yourBytes = bos.toByteArray();
+      //System.out.println("sending bytes");
+      //responder.send(yourBytes);
+      responder.send(resp.toString());
+		} finally {
+			try {
+				bos.close();
+			} catch (Exception ex) {
+				// ignore close exception
+        System.out.println("there was an error while sending stuff!!");
+			}
+		}
+
+    close();
+    return msg;
+  }
+
+  public void waitForClientTill(String breakMsg)
+  {
+    try{
+      while (!reset) {
+        String cmd = waitForCommand();
+        if (cmd.equals(breakMsg)) {
+          break;
+        }
+      }
+    } catch (Exception e) {
+
+    }
+  }
 }
 
