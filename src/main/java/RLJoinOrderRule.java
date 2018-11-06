@@ -184,7 +184,7 @@ public class RLJoinOrderRule extends RelOptRule {
         zmq.waitForClientTill("step");
         if (!zmq.reset) {
           edgeOrdinal = zmq.nextAction;
-          System.out.println("successfully set up next ACTION!");
+          //System.out.println("successfully set up next ACTION!");
         } else {
           System.out.println("next action was chosen randomly");
           // Test out a random strategy.
@@ -274,7 +274,7 @@ public class RLJoinOrderRule extends RelOptRule {
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
               cost, ImmutableList.copyOf(conditions), newFeatures);
       vertexes.add(newVertex);
-      System.out.println("new cost is: " + cost);
+      //System.out.println("new cost is: " + cost);
       // treat this as the reward signal.
       zmq.lastReward = -cost;
 
@@ -306,7 +306,7 @@ public class RLJoinOrderRule extends RelOptRule {
       // is this the reight place to return results of the previous action?
       // FIXME: not sure if we need to do anything else in this scenario?
       if (unusedEdges.size() == 0) {
-        System.out.println("setting episodeDone to true!!!!");
+        //System.out.println("setting episodeDone to true!!!!");
         zmq.episodeDone = 1;
       } else zmq.episodeDone = 0;
       zmq.waitForClientTill("getReward");

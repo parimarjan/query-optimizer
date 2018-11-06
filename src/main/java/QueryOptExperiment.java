@@ -229,7 +229,7 @@ public class QueryOptExperiment {
       // start a server, and wait for a command.
       //ZeroMQServer.init();
       zmq = new ZeroMQServer();
-      //zmq.waitForClientTill("getNumAttrs");
+      zmq.waitForClientTill("getAttrCount");
       while (true) {
         // basically wait for reset every time.
         zmq.waitForClientTill("reset");
@@ -242,8 +242,11 @@ public class QueryOptExperiment {
         System.out.println("query num = " + nextQuery);
         zmq.reset = false;
         String query = queries.get(nextQuery);
-        System.out.println(query);
+        //System.out.println(query);
+        int i = 0;
         for (Planner planner : volcanoPlanners) {
+          i += 1;
+          System.out.println("planner " + i);
           boolean success = planAndExecuteQuery(query, planner);
           if (!success) {
             System.out.println("failed in query " + nextQuery);
@@ -293,7 +296,7 @@ public class QueryOptExperiment {
         RelMetadataQuery mq = RelMetadataQuery.instance();
         RelOptCost unoptCost = mq.getCumulativeCost(node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-        System.out.println("unoptimized cost is: " + unoptCost);
+        //System.out.println("unoptimized cost is: " + unoptCost);
         //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);

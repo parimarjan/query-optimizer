@@ -45,16 +45,19 @@ public class ZeroMQServer {
   public String waitForCommand() throws Exception {
     // FIXME: is it bad to reset the connection every time?
     init();
-    System.out.println("java server waiting for a command");
+    //System.out.println("java server waiting for a command");
     String msg;
     byte[] request = responder.recv(0);
     msg = new String(request);
-    System.out.println("Received " + msg);
+    //System.out.println("Received " + msg);
     Serializable resp = null;
     // this will be set to true ONLY after reset has been called.
     reset = false;
     switch (msg)
     {
+      case "getAttrCount":
+        resp = DbInfo.attrCount;
+        break;
       case "reset":
         episodeNum = 0;
         reset = true;
@@ -77,7 +80,7 @@ public class ZeroMQServer {
         request = responder.recv(0);
         String action = new String(request);
         nextAction = Integer.parseInt(action);
-        System.out.println("received action: " + nextAction);
+        //System.out.println("received action: " + nextAction);
         break;
       case "getReward":
         resp = lastReward;
@@ -90,10 +93,6 @@ public class ZeroMQServer {
         return msg;
     }
 
-    // Based on the message, decide what we may need to reply.
-    //String reply = "World";
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ObjectOutput out = null;
     //System.out.println(resp);
 		try {
       // FIXME: can also write out bytes like this, but it was a pain to deserialize
@@ -105,14 +104,12 @@ public class ZeroMQServer {
       //System.out.println("sending bytes");
       //responder.send(yourBytes);
       responder.send(resp.toString());
-		} finally {
-			try {
-				bos.close();
-			} catch (Exception ex) {
+		} catch (Exception ex) {
 				// ignore close exception
         System.out.println("there was an error while sending stuff!!");
-			}
-		}
+        // at the least call close here.
+        System.exit(-1);
+    }
 
     close();
     return msg;
