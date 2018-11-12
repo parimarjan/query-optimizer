@@ -6,6 +6,7 @@ from utils.logger import Logger
 from utils.utils import copy_network
 from utils.learn import egreedy_action, Qvalues, Qtargets, gradient_descent
 from utils.models import ReplayMemory
+from utils.viz import ScalarVisualizer, TextVisualizer, convert_to_html
 
 # temp imports
 import random
@@ -14,36 +15,55 @@ def read_flags():
     parser = argparse.ArgumentParser()
     # FIXME: specify params
     parser.add_argument("-num_episodes", "-e", type=int, required=False,
-                                default=10000, help="number of training episodes")
+                                default=2000, help="number of training episodes")
     parser.add_argument("-minibatch_size", "-mbs", type=int, required=False,
                                 default=32, help="")
     parser.add_argument("-train_freq", type=int, required=False,
-                                default=32, help="")
-
+                                default=1, help="")
+    parser.add_argument("-target_update_freq", type=int, required=False,
+                                default=100, help="")
     parser.add_argument("-lr", type=float, required=False,
                                 default=0.001, help="")
-
     parser.add_argument("-log_dir", "-ld", type=str, required=False,
                                 default="./logs", help="")
     parser.add_argument("-dir", type=str, required=False,
                                 default="./data", help="default dir")
     return parser.parse_args()
 
-print("starting")
 args = read_flags()
 env = QueryOptEnv()
 step = 0
-# Initialize Logger
-log = Logger(log_dir=args.log_dir)
 
-# TODO: add replay memory
+################## Visdom Stuff ######################
+env_name = "queries: " + str(env.query_set) + "new"
+viz_ep_rewards = ScalarVisualizer("rewards", env=env_name,
+        opts={"xlabel":"episode", "ylabel":"rewards"})
+viz_qvals_rewards = ScalarVisualizer("qvals-rewards", env=env_name,
+        opts={"xlabel":"mdp step", "ylabel":"qvals-rewards"})
+
+viz_epsilon = ScalarVisualizer("epsilon", env=env_name,
+        opts={"xlabel":"episode", "ylabel":"epsilon"})
+
+# FIXME: how to make this nicer, like add newlines etc?
+viz_params = TextVisualizer("Parameters",env=env_name)
+params_text = ("minibatch size: {}\r\n, learning rate: {}\r\n".format(args.minibatch_size, args.lr))
+params_text = "minibatch size: {}\r\n".format(args.minibatch_size)
+params_text += "learning rate: {}\r\n".format(args.lr)
+params_text += "num episodes: {}\r\n".format(args.num_episodes)
+viz_params.update(params_text)
+viz_rl_plan = TextVisualizer("RL Query Plan", env=env_name)
+viz_lopt_plan = TextVisualizer("LOpt Query Plan", env=env_name)
+
+################## End Visdom Stuff ######################
+
+# Initialize Logger
+# log = Logger(log_dir=args.log_dir)
+
 # Initialize replay memory D to capacity N
-D = ReplayMemory(N=512)
-# FIXME:
+D = ReplayMemory(N=args.minibatch_size*1000)
 num_input_features = env.get_num_input_features()
-print("get num input features: " , num_input_features)
 Q = TestQNetwork(num_input_features)
-log.network(Q)
+# log.network(Q)
 Q_ = copy_network(Q)
 
 # FIXME: experiment with this.
@@ -51,59 +71,64 @@ Q_ = copy_network(Q)
 optimizer = optim.RMSprop(
     Q.parameters(), lr=args.lr, alpha=0.95, eps=.01  # ,momentum=0.95,
 )
-
 orig_episode_reward = None
 
 for ep in range(args.num_episodes):
     # print("ep : {} ".format(ep))
     episode_reward = 0.00
-    # TODO: save model if you want.
+    # TODO: save / restore model once things start working
 
-    done = False
     # don't know precise episode lengths
+    done = False
 
     # FIXME: need to change reset semantics to return new state.
     env.reset()
+    cur_ep_it = 0
     while not done:
+        # starting from 1
         step += 1
-	# TODO: can print memory usage etc.
-        state = env._get_state()
+        cur_ep_it += 1
+	# TODO: can print memory usage diagnostics etc.
 
+        state = env._get_state()
         actions = env.action_space()
-        # print("egreedy action going to be called")
-        action_index, epsilon = egreedy_action(Q, state, actions, step)
-        # print("egreedy done!")
+        action_index, qval, epsilon = egreedy_action(Q, state, actions, step)
         new_state, reward, done = env.step(action_index)
         episode_reward += reward
         new_actions = env.action_space()
-        # FIXME: we just might not need done in general for calculating
-        # qtargets since we have new_actions
         D.add((state, actions[action_index], reward, new_state, new_actions, done))
         should_train_model = D.can_sample(args.minibatch_size) and \
                                 step % args.train_freq == 0
         if should_train_model:
-            # FIXME: should get this back from replay memory
             print("going to train model")
             exps = D.sample(args.minibatch_size)
             state_mb, actions_mb, r_mb, new_state_mb, new_actions_mb, done_mb= zip(*exps)
             qvals = Qvalues(state_mb, actions_mb, Q)
             qtargets = Qtargets(r_mb, new_state_mb, new_actions_mb,
                     done_mb, Q_)
-            # print("going to do gradient descent")
             loss = gradient_descent(qtargets, qvals, optimizer)
             print("step: {}, loss: {}, epsilon: {}".format(step,
                 loss.data[0], epsilon))
 
-            # FIXME: what is the point of not updating target every time we train?
-            # if step % params['target_update_freq'] == 0:
-            del Q_
-            Q_ = copy_network(Q)
+            if step % args.target_update_freq == 0:
+                del Q_
+                Q_ = copy_network(Q)
 
-        # store stuff etc.
-
+    # TODO: this stat ONLY makes sense for single query runs.
     if orig_episode_reward is None:
         orig_episode_reward = episode_reward
-    print("*****************************")
+
     print("episode {}, reward: {}".format(ep, episode_reward))
     print("episode reward improvement: {}".format(episode_reward-orig_episode_reward))
-    print("*****************************")
+
+    # updating visdom
+    # TODO: should ONLY do this if we know other optimizers being used.
+    rl_plan = env.get_optimized_plans("RL")
+    lopt_plan = env.get_optimized_plans("LOpt")
+
+    viz_rl_plan.update(convert_to_html(rl_plan))
+    viz_lopt_plan.update(convert_to_html(lopt_plan))
+
+    viz_ep_rewards.update(ep, episode_reward, name="RL")
+    viz_epsilon.update(ep, epsilon, name="RL")
+

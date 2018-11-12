@@ -82,8 +82,9 @@ public class QueryOptExperiment {
 				// node from the joins was projecting all the fields before projecting it down to
 				// only the selected fields
 				public static final ImmutableList<RelOptRule> RL_RULES = ImmutableList.of(
-						RLJoinOrderRule.INSTANCE,
-						ProjectMergeRule.INSTANCE);
+            RLJoinOrderRule.INSTANCE,
+            FilterJoinRule.FILTER_ON_JOIN,
+            ProjectMergeRule.INSTANCE);
 
         // FIXME: not sure if we need to add other rules - like we
         // could add all of the Programs.RULE_SET here, and remove the
@@ -110,6 +111,7 @@ public class QueryOptExperiment {
           }
         }
     }
+    private ArrayList<PLANNER_TYPE> plannerTypes;
     /* actual volcanoPlanners generated using the above rules */
     private ArrayList<Planner> volcanoPlanners;
     //private ArrayList<Planner> hepPlanners;
@@ -135,6 +137,9 @@ public class QueryOptExperiment {
 
     public ArrayList<String> allSqlQueries;
     public static ZeroMQServer zmq;
+    private HashMap<String, HashMap<String, String>> resultVerifier;
+
+    private boolean executeOnDB;
 
     /*
     *************************************************************************
@@ -148,13 +153,15 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, List<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
-
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
+        // FIXME: make this as a variable arg.
+        executeOnDB = false;
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
+        zmq = new ZeroMQServer(5600);
 
+        this.plannerTypes = plannerTypes;
         volcanoPlanners = new ArrayList<Planner>();
-        allSqlQueries = new ArrayList<String>();
 
         // Initialize all the volcanoPlanners we should need
         for (PLANNER_TYPE t  : plannerTypes) {
@@ -168,15 +175,17 @@ public class QueryOptExperiment {
                 bld.programs(rules);
             } else {
                 // probably same statement can work with all types.
-                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
+                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
                 // FIXME temporary:
-                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
+                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
             }
             Planner planner = Frameworks.getPlanner(bld.build());
             volcanoPlanners.add(planner);
         }
 
         // load in the sql queries dataset
+        allSqlQueries = new ArrayList<String>();
+        resultVerifier = new HashMap<String, HashMap<String, String>>();
         File dir = new File(queries.getDatasetPath());
         File[] listOfFiles = dir.listFiles();
         for (File f : listOfFiles) {
@@ -193,6 +202,7 @@ public class QueryOptExperiment {
                 // FIXME: parse the sql to avoid calcite errors.
                 String escapedSql = queryRewriteForCalcite(sql);
                 allSqlQueries.add(escapedSql);
+                resultVerifier.put(escapedSql, new HashMap<String, String>());
             }
         }
     }
@@ -206,8 +216,8 @@ public class QueryOptExperiment {
         for (String query : queries) {
             //System.out.println(query);
             //if (numSuccessfulQueries == 1 || numFailedQueries == 1) break;
-            for (Planner planner : volcanoPlanners) {
-              if (planAndExecuteQuery(query, planner)) {
+            for (int i = 0; i < volcanoPlanners.size(); i++) {
+              if (planAndExecuteQuery(query, i)) {
                 numSuccessfulQueries += 1;
               } else numFailedQueries += 1;
             }
@@ -220,15 +230,14 @@ public class QueryOptExperiment {
      * client side (currently an RL agent in Python), using standard openAI gym
      * semantics.
      */
-    public void train(ArrayList<String> queries) throws Exception
+    public void train(ArrayList<Integer> queries) throws Exception
     {
       // we will treat queries as a pool of sample data. After every reset, we
       // choose a new
       int numSuccessfulQueries = 0;
       int numFailedQueries = 0;
+      zmq.curQuerySet = queries;
       // start a server, and wait for a command.
-      //ZeroMQServer.init();
-      zmq = new ZeroMQServer();
       zmq.waitForClientTill("getAttrCount");
       while (true) {
         // basically wait for reset every time.
@@ -241,15 +250,20 @@ public class QueryOptExperiment {
         int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
         System.out.println("query num = " + nextQuery);
         zmq.reset = false;
-        String query = queries.get(nextQuery);
-        //System.out.println(query);
-        int i = 0;
-        for (Planner planner : volcanoPlanners) {
-          i += 1;
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        for (int i = 0; i < volcanoPlanners.size(); i++) {
           System.out.println("planner " + i);
-          boolean success = planAndExecuteQuery(query, planner);
+          boolean success = planAndExecuteQuery(query, i);
           if (!success) {
             System.out.println("failed in query " + nextQuery);
+          }
+        }
+        if (executeOnDB) {
+          if (!verifyResults(query)) {
+            System.out.println("verifying results failed");
+            System.exit(-1);
+          } else {
+            System.out.println("verifying results succeeded");
           }
         }
       }
@@ -259,9 +273,11 @@ public class QueryOptExperiment {
       return zmq;
     }
 
-    private boolean planAndExecuteQuery(String query, Planner planner)
+    private boolean planAndExecuteQuery(String query, int plannerNum)
       throws Exception
     {
+        Planner planner = volcanoPlanners.get(plannerNum);
+        String plannerName = plannerTypes.get(plannerNum).name();
         // doing this at the start because there are many possible exit
         // points because of various failures.
         planner.close();
@@ -297,7 +313,7 @@ public class QueryOptExperiment {
         RelOptCost unoptCost = mq.getCumulativeCost(node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
         //System.out.println("unoptimized cost is: " + unoptCost);
-        //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
         try {
@@ -308,15 +324,18 @@ public class QueryOptExperiment {
             long start = System.currentTimeMillis();
             RelNode optimizedNode = planner.transform(0, traitSet,
                     node);
-            //System.out.println("optimized toString is: " +
-                    //RelOptUtil.toString(optimizedNode));
-            //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+            System.out.println("optimized toString is: " +
+                    RelOptUtil.toString(optimizedNode));
+            System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
             System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
             System.out.println("planning time: " + (System.currentTimeMillis()-
                   start));
-
-            //executeNode(optimizedNode);
-
+            ZeroMQServer zmq = getZMQServer();
+            zmq.optimizedPlans.put(plannerName, RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+            if (executeOnDB) {
+              String results = executeNode(optimizedNode);
+              resultVerifier.get(query).put(plannerName, results);
+            }
         } catch (Exception e) {
             // it is useful to throw the error here to see what went wrong..
             throw e;
@@ -404,7 +423,8 @@ public class QueryOptExperiment {
         executeNode(hepTransform);
     }
 
-    private void executeNode(RelNode node) {
+    private String executeNode(RelNode node) {
+        String combinedResults = "";
         try {
             System.out.println("in execute node!");
             RelRunner runner = conn.unwrap(RelRunner.class);
@@ -416,20 +436,28 @@ public class QueryOptExperiment {
             long end = System.currentTimeMillis();
             long total = end - start;
             System.out.println("execution time: " + total);
-            //int curLine = 0;
-						//while (res.next()) {
-              //System.out.println(res.getString(1));
-              //curLine += 1;
-              //if (curLine >= 10) {
-                //break;
-              //}
-            //}
-
+            ResultSetMetaData rmd = res.getMetaData();
+            int num_columns = rmd.getColumnCount();
+            System.out.println("num columns " + num_columns);
+            int curLine = 0;
+            while (res.next()) {
+              if (curLine <= 1000) {
+                //System.out.println(res.getString(0));
+                for (int i = 1; i < num_columns+1; i++) {
+                  //System.out.println("column: " + i + ": " + res.getString(i));
+                  combinedResults += res.getString(i);
+                }
+              } else break;
+              curLine += 1;
+            }
+            System.out.println("totalLines = " + curLine);
         } catch (SQLException e) {
             System.out.println("caught exeception while executing query");
             System.out.println(e);
             e.printStackTrace();
+            System.exit(-1);
         }
+        return Integer.toString(combinedResults.hashCode());
     }
 
     private void printInfo(RelNode node) {
@@ -464,5 +492,17 @@ public class QueryOptExperiment {
         //newQuery = "\"explain\" " + newQuery;
         //newQuery = newQuery + " LIMIT 10";
         return newQuery;
+    }
+
+    private boolean verifyResults(String query) {
+      HashMap<String, String> res = resultVerifier.get(query);
+      // need to check that all the values in res must be the same!
+      String rl_val = res.get("RL");
+      for (String val : res.values()) {
+        if (!rl_val.equals(val)) {
+          return false;
+        }
+      }
+      return true;
     }
 }

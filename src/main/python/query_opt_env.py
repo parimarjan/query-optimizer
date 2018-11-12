@@ -17,14 +17,28 @@ class QueryOptEnv():
         #  Socket to talk to server
         print("Going to connect to calcite server")
         self.socket = context.socket(zmq.REQ)
-        self.socket.connect("tcp://localhost:5555")
+        self.socket.connect("tcp://localhost:5600")
+        self.query_set = self.send("getCurQuerySet")
         self.attr_count = int(self.send("getAttrCount"))
+        # TODO: figure this out using the protocol too. Or set it on the java
+        # side using some protocol.
+        self.only_join_condition_attributes = False
 
         # parameters
-        self.reward_damping_factor = 100.00
+        self.reward_damping_factor = 100000.00
+        # self.reward_damping_factor = 1.0
+
+    def get_optimized_plans(self, name):
+        # ignore response
+        self.send(b"getOptPlan")
+        resp = self.send(name)
+        return resp
 
     def get_num_input_features(self):
-        return self.attr_count*2
+        if self.only_join_condition_attributes:
+            return self.attr_count*2
+        else:
+            return self.attr_count*3
 
     def send(self, msg):
         """
@@ -75,10 +89,10 @@ class QueryOptEnv():
         # ask for results
         ob = self._get_state()
         reward = float(self.send(b"getReward"))
-        # reward /= self.reward_damping_factor
+        reward /= self.reward_damping_factor
 
         # to keep rewards positive, shouldn't matter I guess?
-        reward = (1.00 / -reward)*self.reward_damping_factor
+        # reward = (1.00 / -reward)*self.reward_damping_factor
 
         done = int(self.send(b"isDone"))
         return ob, reward, done
@@ -102,11 +116,26 @@ class QueryOptEnv():
         reprsenting a possible action.
         """
         rep = self.send(b"getActions")
-        action_bitsets = ast.literal_eval(rep)
-        actions = []
-        for a in action_bitsets:
-            actions.append(self.bitset_to_features(a))
-        return actions
+
+        if self.only_join_condition_attributes:
+            action_bitsets = ast.literal_eval(rep)
+            actions = []
+            for a in action_bitsets:
+                actions.append(self.bitset_to_features(a))
+            return actions
+        else:
+            # this is so shitty.
+            rep = rep.replace("<", "(")
+            rep = rep.replace(">", ")")
+            action_bitsets = ast.literal_eval(rep)
+            actions = []
+            for a in action_bitsets:
+                left_features = self.bitset_to_features(a[0])
+                right_features = self.bitset_to_features(a[1])
+                actions.append(left_features + right_features)
+
+            assert len(actions[0]) == self.attr_count*2
+            return actions
 
     def _get_state(self):
         rep = self.send(b"getState")

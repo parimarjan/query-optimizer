@@ -14,7 +14,7 @@ class Main {
   // FIXME: get rid of exception
   public static void main(String[] args) throws Exception {
     System.out.println("starting query processing");
-    List<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
+    ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     // TODO: add command line flags for these
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
     plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
@@ -31,17 +31,19 @@ class Main {
         throw e;
     }
     //exp.run(exp.allSqlQueries);
-    //exp.train(exp.allSqlQueries);
-    ArrayList<String> trainingQueries = new ArrayList<String>();
+    ArrayList<Integer> trainingQueries = new ArrayList<Integer>();
     //int nextQuery = ThreadLocalRandom.current().nextInt(0, exp.allSqlQueries.size());
-    //int nextQuery = 11;
-    //System.out.println("***************************");
-    //System.out.println("running query " + nextQuery);
-    //System.out.println("***************************");
-    //trainingQueries.add(exp.allSqlQueries.get(nextQuery));
-    for (int i = 0; i < 10; i++) {
-      trainingQueries.add(exp.allSqlQueries.get(i));
-    }
+    Integer nextQuery = 40;
+    System.out.println("***************************");
+    System.out.println("running query " + nextQuery);
+    System.out.println(exp.allSqlQueries.get(nextQuery));
+    System.out.println("***************************");
+    trainingQueries.add(nextQuery);
+    //System.out.println(trainingQueries.get(0));
+    //for (int i = 0; i < 41; i++) {
+      //trainingQueries.add(i);
+    //}
+    QueryOptExperiment.getZMQServer().curQuerySet = trainingQueries;
     exp.train(trainingQueries);
   }
 }

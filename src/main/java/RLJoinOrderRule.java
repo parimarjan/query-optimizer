@@ -118,6 +118,8 @@ public class RLJoinOrderRule extends RelOptRule {
   @Override public void onMatch(RelOptRuleCall call) {
     //System.out.println("onMatch");
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
+    // tmp: using it for cost estimation.
+    final RelOptPlanner planner = call.getPlanner();
 
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
@@ -174,13 +176,25 @@ public class RLJoinOrderRule extends RelOptRule {
 
       final int edgeOrdinal;
       if (unusedEdges.size() >= 1) {
-        ArrayList<ArrayList<Integer>> actionFeatures = new ArrayList<ArrayList<Integer>>();
-        for (LoptMultiJoin2.Edge edge : unusedEdges) {
-          ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
-          //System.out.println("edge features = " + features);
-          actionFeatures.add(new ArrayList<Integer>(features.toList()));
+        // FIXME: set this up somewhere else.
+        boolean onlyJoinConditionAttributes = false;
+        if (onlyJoinConditionAttributes) {
+          ArrayList<ArrayList<Integer>> actionFeatures = new ArrayList<ArrayList<Integer>>();
+          for (LoptMultiJoin2.Edge edge : unusedEdges) {
+            ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
+            //System.out.println("edge features = " + features);
+            actionFeatures.add(new ArrayList<Integer>(features.toList()));
+          }
+          zmq.actions = actionFeatures;
+        } else {
+          ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
+          for (LoptMultiJoin2.Edge edge : unusedEdges) {
+            Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures2(edge, vertexes, multiJoin);
+            //System.out.println("edge features = " + features);
+            actionFeatures.add(features);
+          }
+          zmq.actions = actionFeatures;
         }
-        zmq.actions = actionFeatures;
         zmq.waitForClientTill("step");
         if (!zmq.reset) {
           edgeOrdinal = zmq.nextAction;
@@ -249,8 +263,6 @@ public class RLJoinOrderRule extends RelOptRule {
               .addAll(minorVertex.visibleFeatures)
               .build();
 
-      // PN: ideally, the RL agent should know all these join conditions
-      // already when choosing a join right?
       // Find the join conditions. All conditions whose factors are now all in
       // the join can now be used.
       final List<RexNode> conditions = new ArrayList<>();
@@ -270,6 +282,7 @@ public class RLJoinOrderRule extends RelOptRule {
           * minorVertex.cost
           * RelMdUtil.guessSelectivity(
               RexUtil.composeConjunction(rexBuilder, conditions, false));
+      //System.out.println("cost = " + cost);
       final Vertex newVertex =
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
               cost, ImmutableList.copyOf(conditions), newFeatures);
@@ -362,6 +375,8 @@ public class RLJoinOrderRule extends RelOptRule {
             .push(right)
             .join(JoinRelType.INNER, condition.accept(shuttle))
             .build();
+        //System.out.println("rowCount: " + mq.getRowCount(join));
+        //System.out.println("rowCount2: " + join.computeSelfCost(planner, mq));
         relNodes.add(Pair.of(join, mapping));
       }
       if (pw != null) {
@@ -500,23 +515,66 @@ public class RLJoinOrderRule extends RelOptRule {
     }
   }
 
+  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures2(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
+      boolean onlyJoinConditionAttributes = false;
+      ArrayList<Integer> left = null;
+      ArrayList<Integer> right = null;
+
+      Pair<ArrayList<Integer>, ArrayList<Integer>> pair;
+      List<Integer> factors = edge.factors.toList();
+
+      // intersect this with the features present in the complete query.
+      ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
+
+      for (Integer factor : factors) {
+        Vertex v = vertexes.get(factor);
+        ImmutableBitSet.Builder fBuilder = ImmutableBitSet.builder();
+        ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
+        // all the join conditions for this edge.
+        allPossibleFeaturesBuilder.addAll(edge.columns);
+        assert v != null;
+        assert v.visibleFeatures != null;
+        ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
+        ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleFeatures);
+        // now we have only the features visible in join condition.
+        //System.out.println("should only have one visible: " + conditionFeatures);
+        fBuilder.addAll(conditionFeatures);
+        fBuilder.addAll(v.visibleFeatures);
+        ImmutableBitSet features = fBuilder.build();
+        //System.out.println("all possible features: " + features);
+        features = features.intersect(queryFeatures);
+        //System.out.println("exact features: " + features);
+        features = mapToQueryFeatures(features, mj);
+        //System.out.println("mapped features: " + features);
+        // both start of as null. Assume first guy is the left one.
+        if (left == null) {
+          left = new ArrayList<Integer>(features.toList());
+        } else {
+          right = new ArrayList<Integer>(features.toList());
+        }
+      }
+      return new Pair<ArrayList<Integer>, ArrayList<Integer>>(left, right);
+  }
+
+  private ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs, LoptMultiJoin2 mj)
+  {
+      ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
+      for (Integer i : bs) {
+        featuresBuilder.set(mj.mapToDatabase.get(i));
+      }
+      return featuresBuilder.build();
+  }
+
   // features based on the DQ paper corresponding to a single edge.
   private ImmutableBitSet getDQFeatures(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
+      boolean onlyJoinConditionAttributes = false;
       ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
       allPossibleFeaturesBuilder.addAll(edge.columns);
       List<Integer> factors = edge.factors.toList();
       for (Integer factor : factors) {
-        //System.out.println("factor = " + factor);
         Vertex v = vertexes.get(factor);
-        if (v == null) {
-          System.out.println("v was null!");
-          System.exit(-1);
-        }
-        if (v.visibleFeatures == null) {
-          System.out.println("visible features was null!");
-          System.out.println(v);
-          System.exit(-1);
-        }
+        assert v != null;
+        assert v.visibleFeatures != null;
         // FIXME: commenting this so we have only join condition features on
         // each edge.
         // allPossibleFeaturesBuilder.addAll(v.visibleFeatures);

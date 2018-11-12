@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.*;
+import java.util.*;
 
 // FIXME: generalize this enough to handle different feature / state
 // representations.
@@ -13,9 +14,10 @@ public class ZeroMQServer {
   // ZMQ stuff for communication
   private ZMQ.Context context;
   private ZMQ.Socket responder;
+  private String port;
 
   // Internal state for the query planning environment. Here, I just assume
-  // that everything is very serial, so the states should be appropriated
+  // that everything is very serial, so the states should be appropriately
   // updated whenever someone asks for it.
   public int episodeNum = 0;
   public int nextAction = -1;
@@ -26,14 +28,17 @@ public class ZeroMQServer {
   public Serializable state;
   public Serializable actions;
 
-  public ZeroMQServer() {
-    // don't need to do anything.
+  public HashMap<String, String> optimizedPlans = new HashMap<String, String>();
+  public ArrayList<Integer> curQuerySet;
+
+  public ZeroMQServer(int port) {
+    this.port = Integer.toString(port);
   }
 
   public void init() throws Exception {
       context = ZMQ.context(ZMQ.REP);
       responder = context.socket(ZMQ.REP);
-      responder.bind("tcp://*:5555");
+      responder.bind("tcp://*:" + this.port);
   }
 
   public void close() {
@@ -53,8 +58,20 @@ public class ZeroMQServer {
     Serializable resp = null;
     // this will be set to true ONLY after reset has been called.
     reset = false;
+    //System.out.println("waitForCommand: " + msg);
     switch (msg)
     {
+      case "getCurQuerySet":
+        resp = curQuerySet;
+        break;
+      case "getOptPlan":
+        resp = "";
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        String plannerName = new String(request);
+        resp = optimizedPlans.get(plannerName);
+        if (resp == null) resp = "";
+        break;
       case "getAttrCount":
         resp = DbInfo.attrCount;
         break;
@@ -117,7 +134,7 @@ public class ZeroMQServer {
 
   public void waitForClientTill(String breakMsg)
   {
-    try{
+    try {
       while (!reset) {
         String cmd = waitForCommand();
         if (cmd.equals(breakMsg)) {
