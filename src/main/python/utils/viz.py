@@ -64,14 +64,19 @@ class ScalarVisualizer(Visualizer):
         opts=self.opts,
         )
 
-  def update(self, t, v, name=None):
-    update = 'append'
+  def update(self, t, v, name=None, update='append'):
 
-    t = np.array(t)
-    v = np.array(v)
+    if update == "append":
+        t = np.array(t)
+        v = np.array(v)
 
-    t = np.expand_dims(t, 0)
-    v = np.expand_dims(v, 0)
+        t = np.expand_dims(t, 0)
+        v = np.expand_dims(v, 0)
+    else:
+        pass
+        # update == replace
+        # t = np.array(t)
+        # v = np.array(v)
 
     self.vis.line(
         v,

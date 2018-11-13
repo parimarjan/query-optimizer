@@ -1,7 +1,26 @@
 import zmq
 import time
-import javaobj
+# import javaobj
 import ast
+import random
+import numpy as np
+
+DEFAULT_PORT = 5600
+def get_port():
+    context = zmq.Context()
+    #  Socket to talk to server
+    print("Going to connect to port server")
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://localhost:2000")
+    # TODO: make it only wait for limited time
+    time.sleep(0.1)
+    socket.send(b"python")
+    ret = socket.recv()
+    print("received: ", ret)
+    return ret
+
+    # return DEFAULT_PORT
+
 
 class QueryOptEnv():
     """
@@ -9,15 +28,18 @@ class QueryOptEnv():
     details to make it an openai environment yet.
     """
 
-    def __init__(self):
+
+    def __init__(self, port=5605):
         """
         TODO: init the zeromq server and establish connection etc.
         """
+        # Want to find a port number to talk on
+        # port = get_port()
         context = zmq.Context()
         #  Socket to talk to server
         print("Going to connect to calcite server")
         self.socket = context.socket(zmq.REQ)
-        self.socket.connect("tcp://localhost:5600")
+        self.socket.connect("tcp://localhost:" + str(port))
         self.query_set = self.send("getCurQuerySet")
         self.attr_count = int(self.send("getAttrCount"))
         # TODO: figure this out using the protocol too. Or set it on the java
@@ -25,14 +47,43 @@ class QueryOptEnv():
         self.only_join_condition_attributes = False
 
         # parameters
-        self.reward_damping_factor = 100000.00
-        # self.reward_damping_factor = 1.0
+        self.reward_damping_factor = 1.00
+        self.min_reward = None
+        self.max_reward = None
+        # just run a random trial to find min / max reward approximations
+        self.max_reward, self.min_reward = self.run_random_episode()
+
+    def run_random_episode(self):
+        '''
+        have a run of the episode and return the min / max reward from this run.
+        '''
+        print("run random episode!")
+
+        done = False
+        min_reward = 10000000
+        max_reward = -10000000
+        self.reset()
+        while not done:
+            state = self._get_state()
+            actions = self.action_space()
+            ob, reward, done = self.step(random.choice(range(len(actions))))
+            if reward < min_reward:
+                min_reward = reward
+            if reward > max_reward:
+                max_reward = reward
+
+        return max_reward, min_reward
 
     def get_optimized_plans(self, name):
         # ignore response
         self.send(b"getOptPlan")
         resp = self.send(name)
         return resp
+
+    def get_optimized_costs(self, name):
+        self.send(b"getJoinsCost")
+        resp = self.send(name)
+        return float(resp)
 
     def get_num_input_features(self):
         if self.only_join_condition_attributes:
@@ -89,13 +140,18 @@ class QueryOptEnv():
         # ask for results
         ob = self._get_state()
         reward = float(self.send(b"getReward"))
-        reward /= self.reward_damping_factor
-
-        # to keep rewards positive, shouldn't matter I guess?
-        # reward = (1.00 / -reward)*self.reward_damping_factor
-
+        reward = self.normalize_reward(reward)
         done = int(self.send(b"isDone"))
         return ob, reward, done
+
+    def normalize_reward(self, reward):
+        # to keep rewards positive, shouldn't matter I guess?
+        # reward = (1.00 / -reward)*self.reward_damping_factor
+        # reward /= self.reward_damping_factor
+        if self.min_reward is not None:
+            reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
+        return reward
+
 
     def reset(self):
         """

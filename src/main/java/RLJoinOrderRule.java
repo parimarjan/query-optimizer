@@ -128,15 +128,18 @@ public class RLJoinOrderRule extends RelOptRule {
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
     final List<Vertex> vertexes = new ArrayList<>();
     int x = 0;
+    Double scanCost = 0.0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // String tableName = MyUtils.getTableName(rel);
       // System.out.println("table name: " + tableName);
       // this is a vertex, so must be one of the tables from the database
       double cost = mq.getRowCount(rel);
+      scanCost += cost;
       vertexes.add(new LeafVertex(i, rel, cost, x));
       x += rel.getRowType().getFieldCount();
     }
+    zmq.scanCost = scanCost;
 
     assert x == multiJoin.getNumTotalFields();
 

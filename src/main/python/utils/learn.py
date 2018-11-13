@@ -4,15 +4,12 @@ import random
 import torch
 
 MIN_EPS = 0.0
-def egreedy_action(Q, state, actions, step):
+def egreedy_action(Q, state, actions, step, decay_steps=1000.00):
     '''
     step is only useful for annealed epsilon.
     '''
      # Initial values
     initial_epsilon, final_epsilon = 1.0, MIN_EPS
-    # FIXME: might want to modify this because our episode lengths are small?
-    decay_steps = float(10000)
-    # decay_steps = float(100)
     # Calculate step size to move from final to initial epsilon with #decay_steps
     step_size = (initial_epsilon - final_epsilon) / decay_steps
     # Calculate annealed epsilon
@@ -28,43 +25,41 @@ def egreedy_action(Q, state, actions, step):
     # Obtain a random value in range [0,1)
     rand = np.random.uniform()
 
+    # FIXME: for debugging, we always calculate the optimal Qvalue, and return
+    # it, even if we are using epsilon.
     # With probability e select random action a_t
+    # if rand < epsilon:
+        # return random.choice(range(len(actions))), 0.0, epsilon
+    # else:
+
+    # will need to update features for each possible action
+    best_action = 0
+    best_val = -100000000
+    phi_batch = []
+    for action, action_features in enumerate(actions):
+        # since these are python lists, + is just concatenation
+        phi = state + action_features
+        assert len(phi) == len(state) + len(action_features), "phi len test"
+        # phi = [phi]
+        phi_batch.append(phi)
+
+    phi_batch = to_variable(np.array(phi_batch)).float()
+    all_rewards = Q(phi_batch)
+
+    # TODO: check that this doesn't force a gpu->cpu conversion
+    for i, val in enumerate(all_rewards):
+        if (val > best_val):
+            best_action = action
+            best_val = val
+
+    # Note: can also find it like this, but converting best_action to cpu would
+    # be slow for choosing every action.
+    # best_reward, best_action = all_vals.data.max(0)
+    # print("best action = ", best_action[0])
     if rand < epsilon:
-        return random.choice(range(len(actions))), epsilon
-    else:
-        # will need to update features for each possible action
-        best_action = 0
-        best_val = -100000000
-        phi_batch = []
-        for action, action_features in enumerate(actions):
-            # since these are python lists, + is just concatenation
-            phi = state + action_features
-            assert len(phi) == len(state) + len(action_features), "phi len test"
-            # phi = [phi]
-            phi_batch.append(phi)
+        best_action = random.choice(range(len(actions)))
 
-            # alternative way to do it: call Q function for each phi.
-            # phi = to_variable(np.array(phi)).float()
-            # val = Q(phi)
-            # if (val > best_val):
-                # best_action = action
-                # best_val = val
-
-        phi_batch = to_variable(np.array(phi_batch)).float()
-        all_rewards = Q(phi_batch)
-
-        # TODO: check that this doesn't force a gpu->cpu conversion
-        for i, val in enumerate(all_rewards):
-            if (val > best_val):
-                best_action = action
-                best_val = val
-
-        # Note: can also find it like this, but converting best_action to cpu would
-        # be slow for choosing every action.
-        # best_reward, best_action = all_vals.data.max(0)
-        # print("best action = ", best_action[0])
-
-        return best_action, best_val, epsilon
+    return best_action, best_val.data[0], epsilon
 
 def Qvalues(state_mb, actions_mb, Q):
     '''
@@ -79,13 +74,11 @@ def Qvalues(state_mb, actions_mb, Q):
         phi_batch.append(phi)
 
     phi_batch = to_variable(np.array(phi_batch)).float()
-    # print(type(phi_batch))
     all_vals = Q(phi_batch)
-    # print(len(all_vals))
     return all_vals
 
 # FIXME: should gamma be just 1.00?
-def Qtargets(r_mb, new_state_mb, new_actions_mb, done_mb, Q_, gamma=1.00):
+def Qtargets(r_mb, new_state_mb, new_actions_mb, done_mb, Q_, gamma=1.0):
     '''
     '''
     # find the max reward we can get for each of the new states using Q_, and

@@ -6,8 +6,6 @@ import torch
 from torch.autograd import Variable
 import random
 
-
-
 class ReplayMemory():
 
     def __init__(self, N, load_existing=False, data_dir="./data"):
@@ -59,7 +57,6 @@ class ReplayMemory():
         '''
         Returns true if item count is at least as big as sample size.
         '''
-        pass
         return len(self.memory) >= sample_size
 
     def save(self, size):
@@ -79,3 +76,11 @@ class ReplayMemory():
         Returns the size in bytes of the memory's array
         '''
         pass
+
+    def fill_up_with_episode(self):
+        # assuming episode length is 6
+        EP_LEN = 6
+        cur_episodes = self.memory[-EP_LEN:]
+        assert len(cur_episodes) == EP_LEN, 'test'
+        for i in range(self.max):
+            self.add(cur_episodes[i % EP_LEN])

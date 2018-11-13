@@ -153,12 +153,12 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries) throws SQLException {
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port) throws SQLException {
         // FIXME: make this as a variable arg.
         executeOnDB = false;
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
-        zmq = new ZeroMQServer(5600);
+        zmq = new ZeroMQServer(port);
 
         this.plannerTypes = plannerTypes;
         volcanoPlanners = new ArrayList<Planner>();
@@ -202,6 +202,10 @@ public class QueryOptExperiment {
                 // FIXME: parse the sql to avoid calcite errors.
                 String escapedSql = queryRewriteForCalcite(sql);
                 allSqlQueries.add(escapedSql);
+                if (allSqlQueries.size() >= 8) {
+                  System.out.println(f.getName());
+                }
+
                 resultVerifier.put(escapedSql, new HashMap<String, String>());
             }
         }
@@ -248,11 +252,10 @@ public class QueryOptExperiment {
         //assert cmd.equals("reset");
         // pick a random query for this episode
         int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
-        System.out.println("query num = " + nextQuery);
         zmq.reset = false;
         String query = allSqlQueries.get(queries.get(nextQuery));
+        System.out.println("running query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
-          System.out.println("planner " + i);
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {
             System.out.println("failed in query " + nextQuery);
@@ -313,7 +316,7 @@ public class QueryOptExperiment {
         RelOptCost unoptCost = mq.getCumulativeCost(node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
         //System.out.println("unoptimized cost is: " + unoptCost);
-        System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
         try {
@@ -324,14 +327,16 @@ public class QueryOptExperiment {
             long start = System.currentTimeMillis();
             RelNode optimizedNode = planner.transform(0, traitSet,
                     node);
-            System.out.println("optimized toString is: " +
-                    RelOptUtil.toString(optimizedNode));
-            System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
-            System.out.println("volcano optimized cost is: " + mq.getCumulativeCost(optimizedNode));
-            System.out.println("planning time: " + (System.currentTimeMillis()-
-                  start));
+            String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+            RelOptCost optCost = mq.getCumulativeCost(optimizedNode);
+            //System.out.println(optPlan);
+            //System.out.println("volcano optimized cost is: " + optCost);
+            //System.out.println("planning time: " + (System.currentTimeMillis()-
+                  //start));
             ZeroMQServer zmq = getZMQServer();
-            zmq.optimizedPlans.put(plannerName, RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+            zmq.optimizedPlans.put(plannerName, optPlan);
+            zmq.optimizedCosts.put(plannerName, optCost.getRows());
+
             if (executeOnDB) {
               String results = executeNode(optimizedNode);
               resultVerifier.get(query).put(plannerName, results);
@@ -416,9 +421,9 @@ public class QueryOptExperiment {
               start));
         //System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
 
-        System.out.println("hep optimized toString is: " +
-            RelOptUtil.toString(hepTransform));
-        System.out.println("hep optimized cost is: " + mq.getCumulativeCost(hepTransform));
+        //System.out.println("hep optimized toString is: " +
+            //RelOptUtil.toString(hepTransform));
+        //System.out.println("hep optimized cost is: " + mq.getCumulativeCost(hepTransform));
         //System.out.println("executing hep optimized node...");
         executeNode(hepTransform);
     }

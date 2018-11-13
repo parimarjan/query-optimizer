@@ -24,18 +24,29 @@ public class ZeroMQServer {
   public boolean reset = false;
   public int episodeDone = 0;
   public double lastReward = 0;
+  public double scanCost = 0;
 
   public Serializable state;
   public Serializable actions;
 
   public HashMap<String, String> optimizedPlans = new HashMap<String, String>();
+  public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
   public ArrayList<Integer> curQuerySet;
 
   public ZeroMQServer(int port) {
     this.port = Integer.toString(port);
   }
 
-  public void init() throws Exception {
+  public ZeroMQServer() {
+    ZMQ.Context reqContext = ZMQ.context(1);
+    ZMQ.Socket requester = reqContext.socket(ZMQ.REQ);
+		//  Socket to talk to server
+    requester.connect("tcp://localhost:2000");
+    requester.send("java".getBytes(), 0);
+    this.port = new String(requester.recv(0));
+  }
+
+  public void restart() throws Exception {
       context = ZMQ.context(ZMQ.REP);
       responder = context.socket(ZMQ.REP);
       responder.bind("tcp://*:" + this.port);
@@ -49,7 +60,7 @@ public class ZeroMQServer {
   // returns the command string sent by the client.
   public String waitForCommand() throws Exception {
     // FIXME: is it bad to reset the connection every time?
-    init();
+    restart();
     //System.out.println("java server waiting for a command");
     String msg;
     byte[] request = responder.recv(0);
@@ -59,8 +70,20 @@ public class ZeroMQServer {
     // this will be set to true ONLY after reset has been called.
     reset = false;
     //System.out.println("waitForCommand: " + msg);
+    String plannerName;
     switch (msg)
     {
+      case "getJoinsCost":
+        resp = "";
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        plannerName = new String(request);
+        Double totalCost = optimizedCosts.get(plannerName);
+        if (totalCost == null) break;
+        // join costs don't consider scan cost.
+
+        resp = (Serializable) (totalCost - scanCost);
+        break;
       case "getCurQuerySet":
         resp = curQuerySet;
         break;
@@ -68,7 +91,7 @@ public class ZeroMQServer {
         resp = "";
         responder.send(resp.toString());
         request = responder.recv(0);
-        String plannerName = new String(request);
+        plannerName = new String(request);
         resp = optimizedPlans.get(plannerName);
         if (resp == null) resp = "";
         break;
@@ -97,7 +120,6 @@ public class ZeroMQServer {
         request = responder.recv(0);
         String action = new String(request);
         nextAction = Integer.parseInt(action);
-        //System.out.println("received action: " + nextAction);
         break;
       case "getReward":
         resp = lastReward;
