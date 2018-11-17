@@ -169,8 +169,23 @@ public class RLJoinOrderRule extends RelOptRule {
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
     zmq.state = new ArrayList<Integer>(DbInfo.getCurrentQueryVisibleFeatures().toList());
-
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
+
+    //final List<RexNode> conditions = new ArrayList<>();
+    //final Iterator<LoptMultiJoin2.Edge> edgeIterator1 = unusedEdges.iterator();
+    //final Iterator<LoptMultiJoin2.Edge> edgeIterator2 = unusedEdges.iterator();
+    //final List<LoptMultiJoin2.Edge> unusedEdges2 = new ArrayList<>();
+    //while (edgeIterator1.hasNext()) {
+      //LoptMultiJoin2.Edge edge = edgeIterator1.next();
+      //ImmutableBitSet edgeFactors = edge.factors;
+      //while (edgeIterator2.hasNext()) {
+        //LoptMultiJoin2.Edge edge2 = edgeIterator2.next();
+        //if (edge.toString().equals(edge2.toString())) continue;
+        //if (!edgeFactors.contains(edge2.factors)) continue;
+        //// time to collapse the edges!
+      //}
+    //}
+
     for (;;) {
       //final int edgeOrdinal = chooseBestEdge(unusedEdges, edgeComparator);
 

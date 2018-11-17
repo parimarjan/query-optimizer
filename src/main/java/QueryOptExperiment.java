@@ -202,10 +202,9 @@ public class QueryOptExperiment {
                 // FIXME: parse the sql to avoid calcite errors.
                 String escapedSql = queryRewriteForCalcite(sql);
                 allSqlQueries.add(escapedSql);
-                if (allSqlQueries.size() >= 8) {
-                  System.out.println(f.getName());
-                }
-
+                //if (allSqlQueries.size() >= 8) {
+                  //System.out.println(f.getName());
+                //}
                 resultVerifier.put(escapedSql, new HashMap<String, String>());
             }
         }
@@ -218,8 +217,6 @@ public class QueryOptExperiment {
         int numSuccessfulQueries = 0;
         int numFailedQueries = 0;
         for (String query : queries) {
-            //System.out.println(query);
-            //if (numSuccessfulQueries == 1 || numFailedQueries == 1) break;
             for (int i = 0; i < volcanoPlanners.size(); i++) {
               if (planAndExecuteQuery(query, i)) {
                 numSuccessfulQueries += 1;

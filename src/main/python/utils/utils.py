@@ -4,6 +4,7 @@ import torch
 from torch.autograd import Variable
 import copy
 import numpy as np
+import glob
 
 def clear_terminal_output():
     os.system('clear')
@@ -34,4 +35,37 @@ def copy_network(Q):
     if torch.cuda.is_available():
         return q2.cuda()
     return q2
+
+def save_network(model, name, step, out_dir):
+    '''
+    saves the model for the given step, and deletes models for older
+    steps.
+    '''
+    out_dir = '{}/models/'.format(out_dir)
+    # Make Dir
+    make_dir(out_dir)
+    # find files in the directory that match same format:
+    fnames = glob.glob(out_dir + name + "*")
+    # for f in fnames:
+        # # delete old ones
+        # os.remove(f)
+
+    # Save model
+    torch.save(model.state_dict(), '{}/{}_step_{}'.format(out_dir, name, step))
+    print("saved model!")
+
+def load_network(name, out_dir):
+    print("load network")
+    out_dir = '{}/models/'.format(out_dir)
+    # Make Dir
+    # find files in the directory that match same format:
+    fnames = glob.glob(out_dir + name + "*")
+    # assert len(fnames) <= 1
+    if len(fnames) == 0:
+        return None, -1
+    else:
+        fname = fnames[0]
+        # also extract the episode number from fname
+        print(fname)
+        return torch.load(fname), 0
 

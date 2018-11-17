@@ -9,11 +9,11 @@ class Main {
 
   public static CommandLine parseArgs(String[] args) {
       Options options = new Options();
-      Option port = new Option("p", "port", true, "input file path");
+      Option port = new Option("p", "port", true, "port number for zmq server");
       port.setRequired(false);
       options.addOption(port);
 
-      Option output = new Option("q", "query", true, "output file");
+      Option output = new Option("q", "query", true, "query num to run");
       output.setRequired(false);
       options.addOption(output);
 
@@ -29,15 +29,17 @@ class Main {
           System.exit(1);
       }
 
-      String inputFilePath = cmd.getOptionValue("port");
-      String outputFilePath = cmd.getOptionValue("output");
+      //String port2 = cmd.getOptionValue("port");
+      //String query2 = cmd.getOptionValue("query");
+      //System.out.println("port : " + port2);
+      //System.out.println("query : " + query2);
       return cmd;
   }
 
   public static void main(String[] args) throws Exception {
-    //CommandLine cmd = parseArgs(args);
-    Integer nextQuery = 8;
-    Integer port = 5609;
+    CommandLine cmd = parseArgs(args);
+    Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query"));
+    Integer port = Integer.parseInt(cmd.getOptionValue("port"));
     System.out.println("using zmq port " + port);
 
     if (args.length == 1) {

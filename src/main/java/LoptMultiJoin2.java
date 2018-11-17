@@ -108,7 +108,6 @@ public class LoptMultiJoin2 extends LoptMultiJoin {
           + ", columns: " + columns + ")";
     }
   }
-
 }
 // End LoptMultiJoin2.java
 

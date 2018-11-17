@@ -11,7 +11,6 @@ class TestQNetwork(nn.Module):
         self.linear1 = nn.Sequential(
             nn.Linear(I, I*H_scale, bias=True),
             nn.ReLU()
-            # nn.Sigmoid()
         )
         self.out = nn.Sequential(
             nn.Linear(I*H_scale, 1, bias=True)

@@ -33,14 +33,13 @@ def egreedy_action(Q, state, actions, step, decay_steps=1000.00):
     # else:
 
     # will need to update features for each possible action
-    best_action = 0
+    best_action = -2
     best_val = -100000000
     phi_batch = []
     for action, action_features in enumerate(actions):
         # since these are python lists, + is just concatenation
         phi = state + action_features
         assert len(phi) == len(state) + len(action_features), "phi len test"
-        # phi = [phi]
         phi_batch.append(phi)
 
     phi_batch = to_variable(np.array(phi_batch)).float()
@@ -87,10 +86,10 @@ def Qtargets(r_mb, new_state_mb, new_actions_mb, done_mb, Q_, gamma=1.0):
     for i, state in enumerate(new_state_mb):
         # array of actions
         actions = new_actions_mb[i]
+        done = done_mb[i]
         phi_batch = []
-        if len(actions) == 0:
-            # maxQ.append(torch.tensor(0.00))
-            maxQ.append(np.array([0.00]))
+        if done:
+            maxQ.append(torch.cuda.FloatTensor([[0]]))
         else:
             for _, action_features in enumerate(actions):
                 # since these are python lists, + is just concatenation
