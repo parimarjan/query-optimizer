@@ -13,7 +13,7 @@ class TestQNetwork(nn.Module):
             nn.ReLU()
         )
         self.out = nn.Sequential(
-            nn.Linear(I*H_scale, 1, bias=True)
+            nn.Linear(I*H_scale, 1, bias=True),
         )
 
         # Init with cuda if available

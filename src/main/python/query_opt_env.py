@@ -97,7 +97,7 @@ class QueryOptEnv():
         # stupid hack, but otherwise we weren't able to close / start the
         # server in time. And somehow without the close / start after sending a
         # reply from the server, it would just go crazy with polling stuff
-        time.sleep(0.01)
+        time.sleep(0.05)
         self.socket.send(msg)
         ret = self.socket.recv()
 	return ret

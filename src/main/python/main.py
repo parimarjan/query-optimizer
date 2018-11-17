@@ -86,7 +86,7 @@ def train(args):
     step = 0
     ################## Visdom Stuff ######################
     env_name = "queries: " + str(env.query_set) + "-plots" + args.suffix
-    env_name_plans = "queries: " + str(env.query_set) + "-plans" + args.suffix
+    # env_name_plans = "queries: " + str(env.query_set) + "-plans" + args.suffix
 
     viz_ep_rewards = ScalarVisualizer("rewards", env=env_name,
             opts={"xlabel":"episode", "ylabel":"rewards"})
@@ -111,8 +111,8 @@ def train(args):
     params_text += "decay steps: {}\r\n".format(args.decay_steps)
     viz_params.update(params_text)
 
-    viz_rl_plan = TextVisualizer("RL Query Plan", env=env_name_plans)
-    viz_lopt_plan = TextVisualizer("LOpt Query Plan", env=env_name_plans)
+    # viz_rl_plan = TextVisualizer("RL Query Plan", env=env_name_plans)
+    # viz_lopt_plan = TextVisualizer("LOpt Query Plan", env=env_name_plans)
 
     ################## End Visdom Stuff ######################
 
@@ -150,7 +150,7 @@ def train(args):
         ep_rewards = []
         ep_qvals = []
 
-        # TODO: is it useful to calculate per episode qtarget-qval loss?
+        # TODO: is it useful to calculate per episode qtarget-qval?
         # qtarget_loss = 0.00
 
         while not done:
@@ -170,6 +170,8 @@ def train(args):
             new_state, reward, done = env.step(action_index)
             ep_rewards.append(reward)
             ep_qvals.append(qval)
+            # print("at episode {}, reward: {}, qval: {}".format(cur_ep_it,
+                # reward, qval))
 
             new_actions = env.action_space()
             D.add((state, actions[action_index], reward, new_state, new_actions, done))
@@ -248,8 +250,8 @@ def train(args):
         # viz_ep_rewards.update(ep, env.normalize_reward(-lopt_cost),
                 # name="LOpt")
 
-        viz_rl_plan.update(convert_to_html(rl_plan))
-        viz_lopt_plan.update(convert_to_html(lopt_plan))
+        # viz_rl_plan.update(convert_to_html(rl_plan))
+        # viz_lopt_plan.update(convert_to_html(lopt_plan))
 
 def cleanup():
     # Send the signal to
