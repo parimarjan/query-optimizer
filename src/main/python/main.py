@@ -55,13 +55,13 @@ def read_flags():
     parser.add_argument("-num_episodes", "-e", type=int, required=False,
                                 default=2000, help="number of training episodes")
     parser.add_argument("-minibatch_size", "-mbs", type=int, required=False,
-                                default=32, help="")
+                                default=16, help="")
     parser.add_argument("-replay_memory_size", type=int, required=False,
                                 default=2000, help="")
     parser.add_argument("-train_freq", type=int, required=False,
                                 default=1, help="")
     parser.add_argument("-decay_steps", type=float, required=False,
-                                default=2000.00, help="")
+                                default=400.00, help="")
     parser.add_argument("-target_update_freq", type=int, required=False,
                                 default=100, help="")
     parser.add_argument("-model_save_freq", type=int, required=False,
@@ -381,10 +381,16 @@ def test(args):
         else:
             num_good += 1
 
-        viz_ep_costs.update(ep, math.log(lopt_cost),
+        viz_ep_costs.update(ep, lopt_cost,
                 name="LOpt")
-        viz_ep_costs.update(ep, math.log(rl_cost),
+        viz_ep_costs.update(ep, rl_cost,
                 name="RL")
+
+        # viz_ep_costs.update(ep, math.log(lopt_cost),
+                # name="LOpt")
+        # viz_ep_costs.update(ep, math.log(rl_cost),
+                # name="RL")
+
         print("ep {}, real loss: {}, cost_diff: {}, lopt_cost:{}, \
                 rl_cost:{}".format(ep, real_loss, lopt_cost-rl_cost, lopt_cost,
                     rl_cost))

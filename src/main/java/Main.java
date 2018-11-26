@@ -18,7 +18,7 @@ class Main {
       options.addOption(output);
 
       Option mode = new Option("m", "mode", true, "test, or train");
-      port.setRequired(false);
+      mode.setRequired(false);
       options.addOption(mode);
 
       CommandLineParser parser = new DefaultParser();
@@ -41,7 +41,7 @@ class Main {
     // FIXME: generalize nextQuery
     Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query"));
     Integer port = Integer.parseInt(cmd.getOptionValue("port"));
-    String mode = cmd.getOptionValue("mode");
+    String mode = cmd.getOptionValue("mode", "train");
     System.out.println("using zmq port " + port);
     System.out.println("mode " + mode);
 
@@ -52,7 +52,7 @@ class Main {
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RANDOM);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.DEBUG);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.BUSHY);
-    plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RL);
+		plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RL);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.ORIG_JOIN_ORDER);
     QueryOptExperiment exp = null;
     try {

@@ -68,18 +68,19 @@ import java.util.TreeSet;
  */
 /// how do we say what this should be triggered by?
 ///// so what exactly does this change to get the ordering across?
-public class LoptJoinOrderTest extends RelOptRule {
-  public static final LoptJoinOrderTest INSTANCE =
-      new LoptJoinOrderTest(RelFactories.LOGICAL_BUILDER);
+public class MyLoptOptimizeJoinRule extends RelOptRule {
+  private boolean isNonLinearCostModel;
+  public static final MyLoptOptimizeJoinRule INSTANCE =
+      new MyLoptOptimizeJoinRule(RelFactories.LOGICAL_BUILDER);
 
   //// can have exact same thing here for our Rule.
-  /** Creates a LoptJoinOrderTest. */
-  public LoptJoinOrderTest(RelBuilderFactory relBuilderFactory) {
+  /** Creates a MyLoptOptimizeJoinRule. */
+  public MyLoptOptimizeJoinRule(RelBuilderFactory relBuilderFactory) {
     super(operand(MultiJoin.class, any()), relBuilderFactory, null);
   }
 
   @Deprecated // to be removed before 2.0
-  public LoptJoinOrderTest(RelFactories.JoinFactory joinFactory,
+  public MyLoptOptimizeJoinRule(RelFactories.JoinFactory joinFactory,
       RelFactories.ProjectFactory projectFactory,
       RelFactories.FilterFactory filterFactory) {
     this(RelBuilder.proto(joinFactory, projectFactory, filterFactory));
@@ -88,27 +89,15 @@ public class LoptJoinOrderTest extends RelOptRule {
   //~ Methods ----------------------------------------------------------------
 
   public void onMatch(RelOptRuleCall call) {
+    isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
     final MultiJoin multiJoinRel = call.rel(0);
-/// PN: a lot of complexity just within creating this..try to figuree out what
-/// stuff we get in multiJoin.
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
-// does this give use various selectivities etc?
-    final RelMetadataQuery mq = call.getMetadataQuery();
+    //final RelMetadataQuery mq = call.getMetadataQuery();
+    final MyMetadataQuery mq = MyMetadataQuery.instance();
 
     findRemovableOuterJoins(mq, multiJoin);
 
-    //List<ImmutableBitSet> projFields = multiJoinRel.getProjFields();
-    //for (ImmutableBitSet bS : projFields) {
-      //if (bS != null) {
-        //for (Integer i : bS) {
-          //System.out.println(i);
-        //}
-      //} else System.out.println("bs was null!");
-    //}
-
-/// different clusters of the join graph? is there only one cluster?
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
-///// PN: this is confusing ----> figure out its use for us.
     final LoptSemiJoinOptimizer semiJoinOpt =
         new LoptSemiJoinOptimizer(call.getMetadataQuery(), multiJoin, rexBuilder);
 
@@ -490,8 +479,6 @@ public class LoptJoinOrderTest extends RelOptRule {
     // with the best cumulative cost. Volcano planner keeps the alternative
     // join subtrees and cost the final plan to pick the best one.
     for (RelNode plan : plans) {
-			System.out.println("another plan: ");
-			System.out.println(RelOptUtil.toString(plan));
       call.transformTo(plan);
     }
   }
@@ -973,10 +960,10 @@ public class LoptJoinOrderTest extends RelOptRule {
     RelOptCost costPushDown = null;
     RelOptCost costTop = null;
     if (pushDownTree != null) {
-      costPushDown = mq.getCumulativeCost(pushDownTree.getJoinTree());
+      costPushDown = ((MyMetadataQuery) mq).getCumulativeCost(pushDownTree.getJoinTree(), isNonLinearCostModel);
     }
     if (topTree != null) {
-      costTop = mq.getCumulativeCost(topTree.getJoinTree());
+      costTop = ((MyMetadataQuery) mq).getCumulativeCost(topTree.getJoinTree(), isNonLinearCostModel);
     }
 
     if (pushDownTree == null) {
@@ -1905,13 +1892,18 @@ public class LoptJoinOrderTest extends RelOptRule {
       boolean selfJoin) {
     boolean swap = false;
 
+    // FIXME: need to be able to access leaf for this.
     //if (selfJoin) {
       //return !multiJoin.isLeftFactorInRemovableSelfJoin(
           //((LoptJoinTree.Leaf) left.getFactorTree()).getId());
     //}
 
-    final Double leftRowCount = mq.getRowCount(left.getJoinTree());
-    final Double rightRowCount = mq.getRowCount(right.getJoinTree());
+    Double leftRowCount = mq.getRowCount(left.getJoinTree());
+    Double rightRowCount = mq.getRowCount(right.getJoinTree());
+    if (isNonLinearCostModel) {
+      leftRowCount  = ((MyMetadataQuery) mq).getNonLinearCount(leftRowCount);
+      rightRowCount = ((MyMetadataQuery) mq).getNonLinearCount(rightRowCount);
+    }
 
     // The left side is smaller than the right if it has fewer rows,
     // or if it has the same number of rows as the right (excluding
@@ -2102,5 +2094,5 @@ public class LoptJoinOrderTest extends RelOptRule {
   }
 }
 
-// End LoptJoinOrderTest.java
+// End MyLoptOptimizeJoinRule.java
 

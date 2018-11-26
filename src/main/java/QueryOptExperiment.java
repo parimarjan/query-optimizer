@@ -65,7 +65,8 @@ public class QueryOptExperiment {
 						        ProjectMergeRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
-            ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
+            //ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
+            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE,
                             FilterJoinRule.FILTER_ON_JOIN,
                             ProjectMergeRule.INSTANCE);
 
@@ -73,7 +74,7 @@ public class QueryOptExperiment {
             ImmutableList.of(JoinOrderTest.INSTANCE);
 
         public static final ImmutableList<RelOptRule> DEBUG_RULES =
-            ImmutableList.of(LoptJoinOrderTest.INSTANCE);
+            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> BUSHY_RULES =
             ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE);
@@ -140,6 +141,7 @@ public class QueryOptExperiment {
     private HashMap<String, HashMap<String, String>> resultVerifier;
 
     private boolean executeOnDB;
+    private static boolean isNonLinearCostModel;
 
     /*
     *************************************************************************
@@ -156,6 +158,7 @@ public class QueryOptExperiment {
     public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port) throws SQLException {
         // FIXME: make this as a variable arg.
         executeOnDB = false;
+        isNonLinearCostModel = true;
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
         zmq = new ZeroMQServer(port);
@@ -281,7 +284,6 @@ public class QueryOptExperiment {
           }
         }
       }
-
     }
 
     /* This function will act as zeromq server controlled by an agent on the
@@ -326,8 +328,25 @@ public class QueryOptExperiment {
       }
     }
 
+    public static boolean isNonLinearCostModel() {
+      return isNonLinearCostModel;
+    }
+
     public static ZeroMQServer getZMQServer() {
       return zmq;
+    }
+
+    private RelOptCost getCost(RelMetadataQuery mq, RelNode node) {
+
+      return ((MyMetadataQuery) mq).getCumulativeCost(node, isNonLinearCostModel);
+      //RelOptCost cost = null;
+      //if (isNonLinearCostModel) {
+         //cost = ((MyMetadataQuery) mq).getCumulativeCost2(node);
+         ////cost = mq.getCumulativeCost2(node);
+      //} else {
+         //cost = mq.getCumulativeCost(node);
+      //}
+      //return cost;
     }
 
     private boolean planAndExecuteQuery(String query, int plannerNum)
@@ -364,10 +383,11 @@ public class QueryOptExperiment {
         DbInfo.setCurrentQueryVisibleFeatures(node);
         // testing if features were set correctly
         ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
-        //System.out.println("DQ features are: " + bs);
 
-        RelMetadataQuery mq = RelMetadataQuery.instance();
-        RelOptCost unoptCost = mq.getCumulativeCost(node);
+        //RelMetadataQuery mq = RelMetadataQuery.instance();
+        //RelMetadataQuery mq = MyMetadataQuery.instance();
+        MyMetadataQuery mq = MyMetadataQuery.instance();
+        RelOptCost unoptCost = getCost(mq, node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
         //System.out.println("unoptimized cost is: " + unoptCost);
         //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
@@ -382,9 +402,8 @@ public class QueryOptExperiment {
             RelNode optimizedNode = planner.transform(0, traitSet,
                     node);
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
-            RelOptCost optCost = mq.getCumulativeCost(optimizedNode);
-            //System.out.println(optPlan);
-            //System.out.println("volcano optimized cost is: " + optCost);
+            RelOptCost optCost = getCost(mq, optimizedNode);
+						System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             //System.out.println("planning time: " + (System.currentTimeMillis()-
                   //start));
             ZeroMQServer zmq = getZMQServer();
@@ -423,7 +442,7 @@ public class QueryOptExperiment {
 
         configBuilder.parserConfig(SqlParser.configBuilder()
                                     .setLex(Lex.MYSQL)
-                                                .build());
+                                    .build());
 
 
         // FIXME: experimental stuff
@@ -433,7 +452,8 @@ public class QueryOptExperiment {
         traitDefs.add(RelCollationTraitDef.INSTANCE);
         configBuilder.traitDefs(traitDefs);
         configBuilder.context(Contexts.EMPTY_CONTEXT);
-
+				// FIXME: testing
+				configBuilder.costFactory(TestCost.FACTORY);
         return configBuilder;
     }
 
@@ -477,7 +497,7 @@ public class QueryOptExperiment {
 
         //System.out.println("hep optimized toString is: " +
             //RelOptUtil.toString(hepTransform));
-        //System.out.println("hep optimized cost is: " + mq.getCumulativeCost(hepTransform));
+        //System.out.println("hep optimized cost is: " + mq.getCumulativeCost2(hepTransform));
         //System.out.println("executing hep optimized node...");
         executeNode(hepTransform);
     }

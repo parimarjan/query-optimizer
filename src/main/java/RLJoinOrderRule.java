@@ -116,7 +116,6 @@ public class RLJoinOrderRule extends RelOptRule {
   }
 
   @Override public void onMatch(RelOptRuleCall call) {
-    //System.out.println("onMatch");
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // tmp: using it for cost estimation.
     final RelOptPlanner planner = call.getPlanner();
@@ -124,17 +123,21 @@ public class RLJoinOrderRule extends RelOptRule {
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
-    final RelMetadataQuery mq = call.getMetadataQuery();
+    boolean isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
+    //final RelMetadataQuery mq = call.getMetadataQuery();
+    final MyMetadataQuery mq = MyMetadataQuery.instance();
+
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
     final List<Vertex> vertexes = new ArrayList<>();
     int x = 0;
     Double scanCost = 0.0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
-      // String tableName = MyUtils.getTableName(rel);
-      // System.out.println("table name: " + tableName);
       // this is a vertex, so must be one of the tables from the database
       double cost = mq.getRowCount(rel);
+      if (isNonLinearCostModel) {
+        cost = mq.getNonLinearCount(cost);
+      }
       scanCost += cost;
       vertexes.add(new LeafVertex(i, rel, cost, x));
       x += rel.getRowType().getFieldCount();
@@ -148,32 +151,13 @@ public class RLJoinOrderRule extends RelOptRule {
       unusedEdges.add(multiJoin.createEdge2(node));
     }
 
-    /// TODO: test other costs here.
-    // Comparator that chooses the best edge. A "good edge" is one that has
-    // a large difference in the number of rows on LHS and RHS.
-    final Comparator<LoptMultiJoin2.Edge> edgeComparator =
-        new Comparator<LoptMultiJoin2.Edge>() {
-          public int compare(LoptMultiJoin2.Edge e0, LoptMultiJoin2.Edge e1) {
-            return Double.compare(rowCountDiff(e0), rowCountDiff(e1));
-          }
-
-          private double rowCountDiff(LoptMultiJoin2.Edge edge) {
-            assert edge.factors.cardinality() == 2 : edge.factors;
-            final int factor0 = edge.factors.nextSetBit(0);
-            final int factor1 = edge.factors.nextSetBit(factor0 + 1);
-            return Math.abs(vertexes.get(factor0).cost
-                - vertexes.get(factor1).cost);
-          }
-        };
-
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
     zmq.state = new ArrayList<Integer>(mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures(), multiJoin).toList());
-    // FIXME: wrong version
-    //zmq.state = new ArrayList<Integer>(DbInfo.getCurrentQueryVisibleFeatures().toList());
 
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
 
+    // FIXME: finish attempt to collapse common edges.
     //final List<RexNode> conditions = new ArrayList<>();
     //final Iterator<LoptMultiJoin2.Edge> edgeIterator1 = unusedEdges.iterator();
     //final Iterator<LoptMultiJoin2.Edge> edgeIterator2 = unusedEdges.iterator();
@@ -188,10 +172,7 @@ public class RLJoinOrderRule extends RelOptRule {
         //// time to collapse the edges!
       //}
     //}
-
     for (;;) {
-      //final int edgeOrdinal = chooseBestEdge(unusedEdges, edgeComparator);
-
       // each edge is equivalent to a possible action, and must be represented
       // by its features
 
@@ -203,7 +184,6 @@ public class RLJoinOrderRule extends RelOptRule {
           ArrayList<ArrayList<Integer>> actionFeatures = new ArrayList<ArrayList<Integer>>();
           for (LoptMultiJoin2.Edge edge : unusedEdges) {
             ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
-            //System.out.println("edge features = " + features);
             actionFeatures.add(new ArrayList<Integer>(features.toList()));
           }
           zmq.actions = actionFeatures;
@@ -211,7 +191,6 @@ public class RLJoinOrderRule extends RelOptRule {
           ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
           for (LoptMultiJoin2.Edge edge : unusedEdges) {
             Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures2(edge, vertexes, multiJoin);
-            //System.out.println("edge features = " + features);
             actionFeatures.add(features);
           }
           zmq.actions = actionFeatures;
@@ -219,7 +198,6 @@ public class RLJoinOrderRule extends RelOptRule {
         zmq.waitForClientTill("step");
         if (!zmq.reset) {
           edgeOrdinal = zmq.nextAction;
-          //System.out.println("successfully set up next ACTION!");
         } else {
           System.out.println("next action was chosen randomly");
           // Test out a random strategy.
@@ -303,12 +281,14 @@ public class RLJoinOrderRule extends RelOptRule {
           * minorVertex.cost
           * RelMdUtil.guessSelectivity(
               RexUtil.composeConjunction(rexBuilder, conditions, false));
-      //System.out.println("cost = " + cost);
+      if (isNonLinearCostModel) {
+        cost = mq.getNonLinearCount(cost);
+      }
+
       final Vertex newVertex =
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
               cost, ImmutableList.copyOf(conditions), newFeatures);
       vertexes.add(newVertex);
-      //System.out.println("new cost is: " + cost);
       // treat this as the reward signal.
       zmq.lastReward = -cost;
 
@@ -340,7 +320,6 @@ public class RLJoinOrderRule extends RelOptRule {
       // is this the reight place to return results of the previous action?
       // FIXME: not sure if we need to do anything else in this scenario?
       if (unusedEdges.size() == 0) {
-        //System.out.println("setting episodeDone to true!!!!");
         zmq.episodeDone = 1;
       } else zmq.episodeDone = 0;
       zmq.waitForClientTill("getReward");
@@ -396,8 +375,9 @@ public class RLJoinOrderRule extends RelOptRule {
             .push(right)
             .join(JoinRelType.INNER, condition.accept(shuttle))
             .build();
-        //System.out.println("rowCount: " + mq.getRowCount(join));
+        //System.out.println("before rowCount:");
         //System.out.println("rowCount2: " + join.computeSelfCost(planner, mq));
+        //System.out.println("rowCount3: " + mq.getNonCumulativeCost(join));
         relNodes.add(Pair.of(join, mapping));
       }
       if (pw != null) {
@@ -410,7 +390,6 @@ public class RLJoinOrderRule extends RelOptRule {
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
-    //System.out.println("bushy optimized node: " + RelOptUtil.toString(optNode));
     call.transformTo(optNode);
   }
 

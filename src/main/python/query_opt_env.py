@@ -146,9 +146,13 @@ class QueryOptEnv():
         # reward = (1.00 / -reward)*self.reward_damping_factor
         # reward /= self.reward_damping_factor
         if self.min_reward is not None:
-            reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
+            # reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
+            reward = self.scale_reward(reward)
         return reward
 
+    def scale_reward(self, reward):
+        # return (reward-self.min_reward)/(self.max_reward-self.min_reward)
+        return reward / 30e6
 
     def reset(self):
         """
