@@ -54,18 +54,25 @@ def save_network(model, name, step, out_dir):
     torch.save(model.state_dict(), '{}/{}_step_{}'.format(out_dir, name, step))
     print("saved model!")
 
-def load_network(name, out_dir):
-    print("load network")
+def model_name_to_step(name):
+    return int(name.split("_")[-1])
+
+def get_model_names(name, out_dir):
+    '''
+    returns sorted list of the saved model_step files.
+    '''
     out_dir = '{}/models/'.format(out_dir)
     # Make Dir
     # find files in the directory that match same format:
-    fnames = glob.glob(out_dir + name + "*")
+    fnames = sorted(glob.glob(out_dir + name + "*"), key=model_name_to_step)
+    return fnames
+
     # assert len(fnames) <= 1
-    if len(fnames) == 0:
-        return None, -1
-    else:
-        fname = fnames[0]
-        # also extract the episode number from fname
-        print(fname)
-        return torch.load(fname), 0
+    # if len(fnames) == 0:
+        # return None, -1
+    # else:
+        # fname = fnames[0]
+        # # also extract the episode number from fname
+        # print(fname)
+        # return torch.load(fname), 0
 

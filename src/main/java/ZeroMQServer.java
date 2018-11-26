@@ -25,6 +25,7 @@ public class ZeroMQServer {
   public int episodeDone = 0;
   public double lastReward = 0;
   public double scanCost = 0;
+  public String query = "";
 
   public Serializable state;
   public Serializable actions;
@@ -102,7 +103,7 @@ public class ZeroMQServer {
         episodeNum = 0;
         reset = true;
         // don't need to send any reply here.
-        resp = "";
+        resp = query;
         break;
       case "getActions":
         resp = actions;

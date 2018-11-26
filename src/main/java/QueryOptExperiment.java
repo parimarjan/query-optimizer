@@ -227,6 +227,63 @@ public class QueryOptExperiment {
         System.out.println("numFailedQueries = " + numFailedQueries);
     }
 
+    public void test(ArrayList<Integer> queries) throws Exception
+    {
+      // we will treat queries as a pool of sample data. After every reset, we
+      // choose a new
+      int numSuccessfulQueries = 0;
+      int numFailedQueries = 0;
+      zmq.curQuerySet = queries;
+      // start a server, and wait for a command.
+      zmq.waitForClientTill("getAttrCount");
+      for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
+        // basically wait for reset every time.
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        zmq.query = query;
+        zmq.waitForClientTill("reset");
+        zmq.reset = false;
+        System.out.println("next query: " + nextQuery);
+        for (int i = 0; i < volcanoPlanners.size(); i++) {
+          boolean success = planAndExecuteQuery(query, i);
+          if (!success) {
+            System.out.println("failed in query " + nextQuery);
+          }
+        }
+        if (executeOnDB) {
+          if (!verifyResults(query)) {
+            System.out.println("verifying results failed");
+            System.exit(-1);
+          } else {
+            System.out.println("verifying results succeeded");
+          }
+        }
+      }
+
+      for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
+        // basically wait for reset every time.
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        zmq.query = query;
+        zmq.waitForClientTill("reset");
+        zmq.reset = false;
+        System.out.println("next query: " + nextQuery);
+        for (int i = 0; i < volcanoPlanners.size(); i++) {
+          boolean success = planAndExecuteQuery(query, i);
+          if (!success) {
+            System.out.println("failed in query " + nextQuery);
+          }
+        }
+        if (executeOnDB) {
+          if (!verifyResults(query)) {
+            System.out.println("verifying results failed");
+            System.exit(-1);
+          } else {
+            System.out.println("verifying results succeeded");
+          }
+        }
+      }
+
+    }
+
     /* This function will act as zeromq server controlled by an agent on the
      * client side (currently an RL agent in Python), using standard openAI gym
      * semantics.
@@ -242,16 +299,16 @@ public class QueryOptExperiment {
       zmq.waitForClientTill("getAttrCount");
       while (true) {
         // basically wait for reset every time.
-        zmq.waitForClientTill("reset");
         // FIXME: add a way to make it possible to send end command.
 
-        // should always call reset for next query.
-        //assert cmd.equals("reset");
         // pick a random query for this episode
+        //System.out.println("queries size is: " + queries.size());
         int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
-        zmq.reset = false;
         String query = allSqlQueries.get(queries.get(nextQuery));
-        System.out.println("running query: " + nextQuery);
+        zmq.query = query;
+        zmq.waitForClientTill("reset");
+        zmq.reset = false;
+        System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {

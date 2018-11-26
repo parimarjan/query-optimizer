@@ -17,6 +17,10 @@ class Main {
       output.setRequired(false);
       options.addOption(output);
 
+      Option mode = new Option("m", "mode", true, "test, or train");
+      port.setRequired(false);
+      options.addOption(mode);
+
       CommandLineParser parser = new DefaultParser();
       HelpFormatter formatter = new HelpFormatter();
       CommandLine cmd = null;
@@ -29,24 +33,17 @@ class Main {
           System.exit(1);
       }
 
-      //String port2 = cmd.getOptionValue("port");
-      //String query2 = cmd.getOptionValue("query");
-      //System.out.println("port : " + port2);
-      //System.out.println("query : " + query2);
       return cmd;
   }
 
   public static void main(String[] args) throws Exception {
     CommandLine cmd = parseArgs(args);
+    // FIXME: generalize nextQuery
     Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query"));
     Integer port = Integer.parseInt(cmd.getOptionValue("port"));
+    String mode = cmd.getOptionValue("mode");
     System.out.println("using zmq port " + port);
-
-    if (args.length == 1) {
-      nextQuery = Integer.parseInt(args[0]);
-    } else if (args.length == 2) {
-      port = Integer.parseInt(args[1]);
-    }
+    System.out.println("mode " + mode);
 
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     // TODO: add command line flags for these
@@ -65,19 +62,37 @@ class Main {
         throw e;
     }
     //exp.run(exp.allSqlQueries);
-    ArrayList<Integer> trainingQueries = new ArrayList<Integer>();
+    ArrayList<Integer> queries = new ArrayList<Integer>();
     //int nextQuery = ThreadLocalRandom.current().nextInt(0, exp.allSqlQueries.size());
     System.out.println("***************************");
     System.out.println("running query " + nextQuery);
-    System.out.println(exp.allSqlQueries.get(nextQuery));
     System.out.println("***************************");
-    trainingQueries.add(nextQuery);
-    //for (int i = 0; i < 10; i++) {
-      //nextQuery = ThreadLocalRandom.current().nextInt(0, exp.allSqlQueries.size());
-      //trainingQueries.add(nextQuery);
-    //}
-    QueryOptExperiment.getZMQServer().curQuerySet = trainingQueries;
-    exp.train(trainingQueries);
+    if (nextQuery == -1) {
+      for (int i = 0; i < 41; i++) {
+        //nextQuery = ThreadLocalRandom.current().nextInt(0, exp.allSqlQueries.size());
+        if (i % 2 == 0) {
+          nextQuery = i;
+          queries.add(nextQuery);
+        }
+      }
+    } else if (nextQuery == -2) {
+      // odd version
+      for (int i = 0; i < 41; i++) {
+        if (i % 2 != 0) {
+          nextQuery = i;
+          queries.add(nextQuery);
+        }
+      }
+
+    } else {
+      queries.add(nextQuery);
+    }
+    QueryOptExperiment.getZMQServer().curQuerySet = queries;
+    if (mode.equals("train")) {
+      exp.train(queries);
+    } else {
+      exp.test(queries);
+    }
   }
 }
 

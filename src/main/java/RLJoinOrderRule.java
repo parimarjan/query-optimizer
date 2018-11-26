@@ -168,7 +168,10 @@ public class RLJoinOrderRule extends RelOptRule {
 
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
-    zmq.state = new ArrayList<Integer>(DbInfo.getCurrentQueryVisibleFeatures().toList());
+    zmq.state = new ArrayList<Integer>(mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures(), multiJoin).toList());
+    // FIXME: wrong version
+    //zmq.state = new ArrayList<Integer>(DbInfo.getCurrentQueryVisibleFeatures().toList());
+
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
 
     //final List<RexNode> conditions = new ArrayList<>();

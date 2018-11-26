@@ -48,21 +48,20 @@ class QueryOptEnv():
 
         # parameters
         self.reward_damping_factor = 1.00
+        # will store min_reward / max_reward for each unique query
+        # will map query: (min_reward, max_reward)
+        self.reward_mapper = {}
+        # these values will get updated in reset.
         self.min_reward = None
         self.max_reward = None
-        # just run a random trial to find min / max reward approximations
-        self.max_reward, self.min_reward = self.run_random_episode()
 
     def run_random_episode(self):
         '''
         have a run of the episode and return the min / max reward from this run.
         '''
-        print("run random episode!")
-
         done = False
         min_reward = 10000000
         max_reward = -10000000
-        self.reset()
         while not done:
             state = self._get_state()
             actions = self.action_space()
@@ -72,7 +71,7 @@ class QueryOptEnv():
             if reward > max_reward:
                 max_reward = reward
 
-        return max_reward, min_reward
+        return min_reward, max_reward
 
     def get_optimized_plans(self, name):
         # ignore response
@@ -122,8 +121,6 @@ class QueryOptEnv():
             reward (float) :
                 amount of reward achieved by the previous action. The scale
                 varies between environments, but the goal is always to increase
-                your total reward.
-            episode_over (bool) :
                 whether it's time to reset the environment again. Most (but not
                 all) tasks are divided up into well-defined episodes, and done
                 being True indicates the episode has terminated. (For example,
@@ -158,8 +155,29 @@ class QueryOptEnv():
         This should start a new episode.
         """
         # send a reset message to the server
-        self.send(b"reset")
+        query = self.send(b"reset")
+        # print("reset. Next query is: ", query)
+        # print("self.reward mapper is: ")
+        # for k, v in self.reward_mapper.iteritems():
+            # print(v)
+        # we want to be able to figure out which query this was so we can set
+        # the appropriate max / min ranges to scale the rewards.
+        if query in self.reward_mapper:
+            self.min_reward = self.reward_mapper[query][0]
+            self.max_reward = self.reward_mapper[query][1]
+        else:
+            # FIXME: dumb hack so self.step does right thing when executing
+            # random episode.
+            self.min_reward = None
+            self.max_reward = None
+            self.min_reward, self.max_reward = self.run_random_episode()
+            self.reward_mapper[query] = (self.min_reward, self.max_reward)
+
+            # FIXME: dumb hack
+            self.reset()
+
         # return self._get_state()
+
 
     def action_space(self):
         """
