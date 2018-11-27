@@ -143,11 +143,10 @@ class QueryOptEnv():
 
     def normalize_reward(self, reward):
         # to keep rewards positive, shouldn't matter I guess?
-        # reward = (1.00 / -reward)*self.reward_damping_factor
         # reward /= self.reward_damping_factor
         if self.min_reward is not None:
-            # reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
-            reward = self.scale_reward(reward)
+            reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
+            # reward = self.scale_reward(reward)
         return reward
 
     def scale_reward(self, reward):

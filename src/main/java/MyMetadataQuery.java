@@ -22,9 +22,9 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
   // in terms of number of rows. This is used for calculating the cost in a
   // non-linear model.
-  private final int MEMORY_LIMIT = 50000;
-  private final int OVERFLOW_PENALTY = 1000;
-  private final int NON_LINEAR_METHOD = 2;
+  private final int MEMORY_LIMIT = 1000;
+  private final int OVERFLOW_PENALTY = MEMORY_LIMIT*2;
+  private final int NON_LINEAR_METHOD = 3;
 
   /**
    * Returns an instance of RelMetadataQuery. It ensures that cycles do not
@@ -52,9 +52,12 @@ public class MyMetadataQuery extends RelMetadataQuery {
     if (NON_LINEAR_METHOD == 1) {
       cost = count * 2.0;
     } else if (NON_LINEAR_METHOD == 2) {
-      int numOverflows = ((int) count) % MEMORY_LIMIT;
-      //System.out.println("numOverflows: " + numOverflows);
+      int numOverflows = ((int) count) / MEMORY_LIMIT;
       cost = count + numOverflows * OVERFLOW_PENALTY;
+    } else if (NON_LINEAR_METHOD == 3) {
+      int numOverflows = ((int) count) / MEMORY_LIMIT;
+      // FIXME: add random offset?
+      cost = (count/1e8) + numOverflows * OVERFLOW_PENALTY;
     }
     return cost;
   }
@@ -69,7 +72,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
 	@Override
   public RelOptCost getCumulativeCost(RelNode rel) {
     // FIXME: cast this safely
-    TestCost orig_cost = (TestCost) super.getCumulativeCost(rel);
+    RelOptCost orig_cost = super.getCumulativeCost(rel);
     return orig_cost;
   }
 
@@ -78,6 +81,17 @@ public class MyMetadataQuery extends RelMetadataQuery {
       return getCumulativeCost2(rel);
     } else {
       return getCumulativeCost(rel);
+    }
+  }
+
+  public RelOptCost getNonCumulativeCost(RelNode rel, boolean isNonLinearCostModel) {
+    RelOptCost orig_cost = super.getNonCumulativeCost(rel);
+    double rows = orig_cost.getRows();
+
+    if (isNonLinearCostModel) {
+      return new TestCost(getNonLinearCount(rows), 0.0, 0.0);
+    } else {
+      return orig_cost;
     }
   }
 }

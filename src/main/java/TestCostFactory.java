@@ -102,11 +102,12 @@ class TestCost implements RelOptCost {
   }
 
   private double getRealRowCount() {
-    int MEMORY_LIMIT = 50000;
-    int OVERFLOW_PENALTY = 1000;
+    int MEMORY_LIMIT = 1000;
+    int OVERFLOW_PENALTY = MEMORY_LIMIT*2;
 
-    int numOverflows = ((int) this.rowCount) % MEMORY_LIMIT;
-    return this.rowCount + numOverflows * OVERFLOW_PENALTY;
+    int numOverflows = ((int) this.rowCount) / MEMORY_LIMIT;
+    //return this.rowCount + numOverflows * OVERFLOW_PENALTY;
+    return (this.rowCount / 1e8) + numOverflows * OVERFLOW_PENALTY;
   }
 
   public double getRows() {
@@ -115,9 +116,9 @@ class TestCost implements RelOptCost {
     return rowCount;
   }
 
-  public void setRows(double rowCount) {
-    this.rowCount = rowCount;
-  }
+  //public void setRows(double rowCount) {
+    //this.rowCount = rowCount;
+  //}
 
   @Override public int hashCode() {
     return Objects.hash(rowCount, cpu, io);

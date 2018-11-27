@@ -158,7 +158,7 @@ public class QueryOptExperiment {
     public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port) throws SQLException {
         // FIXME: make this as a variable arg.
         executeOnDB = false;
-        isNonLinearCostModel = true;
+        isNonLinearCostModel = false;
         conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
         zmq = new ZeroMQServer(port);
@@ -403,12 +403,18 @@ public class QueryOptExperiment {
                     node);
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
-						System.out.println("optimized cost for " + plannerName + " is: " + optCost);
+						//System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             //System.out.println("planning time: " + (System.currentTimeMillis()-
                   //start));
             ZeroMQServer zmq = getZMQServer();
             zmq.optimizedPlans.put(plannerName, optPlan);
             zmq.optimizedCosts.put(plannerName, optCost.getRows());
+            //if (!plannerName.equals("RL")) {
+              //zmq.optimizedCosts.put(plannerName, optCost.getRows());
+            //} else {
+              ////System.out.println("optimized cost after transform for RL: " + optCost.getRows());
+              ////System.out.println("optimized plan after transform for RL: " + optPlan);
+            //}
 
             if (executeOnDB) {
               String results = executeNode(optimizedNode);
@@ -453,7 +459,9 @@ public class QueryOptExperiment {
         configBuilder.traitDefs(traitDefs);
         configBuilder.context(Contexts.EMPTY_CONTEXT);
 				// FIXME: testing
-				configBuilder.costFactory(TestCost.FACTORY);
+        if (isNonLinearCostModel) {
+          configBuilder.costFactory(TestCost.FACTORY);
+        }
         return configBuilder;
     }
 

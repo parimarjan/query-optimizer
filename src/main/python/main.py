@@ -28,6 +28,7 @@ FILL_UP_GOOD_RUNS = False
 
 # TODO: execute multiple runs together
 JAVA_PROCESS = None
+USE_LOPT = False
 
 def to_bitset(num_attrs, arr):
     ret = [i for i, val in enumerate(arr) if val == 1.0]
@@ -78,6 +79,8 @@ def read_flags():
     parser.add_argument("-train", type=int, required=False,
                                 default=1, help="")
     parser.add_argument("-test", type=int, required=False,
+                                default=0, help="")
+    parser.add_argument("-verbose", type=int, required=False,
                                 default=0, help="")
 
     parser.add_argument("-dir", type=str, required=False,
@@ -228,6 +231,8 @@ def train(args):
             new_state, reward, done = env.step(action_index)
             assert new_state == state, "should be same in berkeley featurization"
             ep_rewards.append(reward)
+            if args.verbose:
+                print("step: {}, reward: {}".format(step, reward))
             ep_qvals.append(qvalue)
             # print("at episode {}, reward: {}, qval: {}".format(cur_ep_it,
                 # reward, qval))
@@ -248,20 +253,13 @@ def train(args):
                 # FIXME: debug stuff
                 num_action_choices = len(new_state_actions_mb[0]) - done_mb[0]
 
-                # if (qdiff > 0.5 and ep > 50):
-                    # pdb.set_trace()
-                # if (qdiff > 5 and ep > 100):
-                    # save it again!
-                    # save_network(Q, get_model_name(args), step, args.dir)
-
                 loss = gradient_descent(qtargets, qvals, optimizer)
                 # print("step: {}, loss: {}, qtargets-qvals: {}, epsilon: {}".format(step,
                     # loss.data[0], qdiff, epsilon))
 
                 # FIXME: debug stuff
-                print("step: {}, loss: {}, qtargets-qvals: {}, num_actions: {}, reward: {}, epsilon: {}".format(step, loss.data[0], qdiff,
-                    num_action_choices, r_mb[0], epsilon))
-                #pdb.set_trace()
+                # print("step: {}, loss: {}, qtargets-qvals: {}, num_actions: {}, reward: {}, epsilon: {}".format(step, loss.data[0], qdiff,
+                    # num_action_choices, r_mb[0], epsilon))
 
                 if step % args.target_update_freq == 0:
                     del Q_
@@ -270,9 +268,7 @@ def train(args):
         # episode is done!
 
         episode_reward = sum(ep_rewards)
-        # print("episode {}, reward: {}".format(ep, episode_reward))
-        # print("episode reward improvement: {}".format(episode_reward-orig_episode_reward))
-
+        print("episode {}, reward: {}".format(ep, episode_reward))
         if (episode_reward > best_episode_reward) and FILL_UP_GOOD_RUNS:
             D.fill_up_with_episode()
             best_episode_reward = episode_reward
@@ -298,13 +294,15 @@ def train(args):
 
             # FIXME: test robustness if LOpt not being used etc.
             rl_plan = env.get_optimized_plans("RL")
-            lopt_plan = env.get_optimized_plans("LOpt")
-            lopt_cost = env.get_optimized_costs("LOpt")
+            if USE_LOPT:
+                lopt_plan = env.get_optimized_plans("LOpt")
+                lopt_cost = env.get_optimized_costs("LOpt")
             rl_cost = env.get_optimized_costs("RL")
 
             # lopt_cost = find_cost(lopt_plan)
-            viz_ep_costs.update(ep, lopt_cost,
-                    name="LOpt")
+            if USE_LOPT:
+                viz_ep_costs.update(ep, lopt_cost,
+                        name="LOpt")
             viz_ep_costs.update(ep, rl_cost,
                     name="RL")
             # viz_ep_costs.update(ep, math.log(lopt_cost),
@@ -373,16 +371,19 @@ def test(args):
 
         real_loss = np.sum(np.array(total_remaining_rewards)-np.array(ep_qvals))
         rl_plan = env.get_optimized_plans("RL")
-        lopt_plan = env.get_optimized_plans("LOpt")
-        lopt_cost = env.get_optimized_costs("LOpt")
-        rl_cost = env.get_optimized_costs("RL")
-        if lopt_cost < rl_cost:
-            num_bad += 1
-        else:
-            num_good += 1
+        assert USE_LOPT, "testing should use it"
 
-        viz_ep_costs.update(ep, lopt_cost,
-                name="LOpt")
+        if USE_LOPT:
+            lopt_plan = env.get_optimized_plans("LOpt")
+            lopt_cost = env.get_optimized_costs("LOpt")
+            rl_cost = env.get_optimized_costs("RL")
+            if lopt_cost < rl_cost:
+                num_bad += 1
+            else:
+                num_good += 1
+        if USE_LOPT:
+            viz_ep_costs.update(ep, lopt_cost,
+                    name="LOpt")
         viz_ep_costs.update(ep, rl_cost,
                 name="RL")
 
@@ -391,9 +392,10 @@ def test(args):
         # viz_ep_costs.update(ep, math.log(rl_cost),
                 # name="RL")
 
-        print("ep {}, real loss: {}, cost_diff: {}, lopt_cost:{}, \
-                rl_cost:{}".format(ep, real_loss, lopt_cost-rl_cost, lopt_cost,
-                    rl_cost))
+        if USE_LOPT:
+            print("ep {}, real loss: {}, cost_diff: {}, lopt_cost:{}, \
+                    rl_cost:{}".format(ep, real_loss, lopt_cost-rl_cost, lopt_cost,
+                        rl_cost))
         print("num good: {}, num bad: {}".format(num_good, num_bad))
 
 def cleanup():

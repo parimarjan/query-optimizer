@@ -55,6 +55,8 @@ import org.apache.calcite.plan.RelOptUtil;
 import java.util.concurrent.ThreadLocalRandom;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.plan.*;
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.parser.*;
 
 /**
  * TODO: describe bushy rule which served as the base template etc.
@@ -119,7 +121,6 @@ public class RLJoinOrderRule extends RelOptRule {
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // tmp: using it for cost estimation.
     final RelOptPlanner planner = call.getPlanner();
-
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
@@ -281,8 +282,10 @@ public class RLJoinOrderRule extends RelOptRule {
           * minorVertex.cost
           * RelMdUtil.guessSelectivity(
               RexUtil.composeConjunction(rexBuilder, conditions, false));
+      //System.out.println("orig cost for action: " + cost);
       if (isNonLinearCostModel) {
         cost = mq.getNonLinearCount(cost);
+        //System.out.println("non linear cost: " + cost);
       }
 
       final Vertex newVertex =
@@ -378,6 +381,7 @@ public class RLJoinOrderRule extends RelOptRule {
         //System.out.println("before rowCount:");
         //System.out.println("rowCount2: " + join.computeSelfCost(planner, mq));
         //System.out.println("rowCount3: " + mq.getNonCumulativeCost(join));
+        //System.out.println("nonlinear rowCount3: " + mq.getNonCumulativeCost(join, true));
         relNodes.add(Pair.of(join, mapping));
       }
       if (pw != null) {
@@ -390,6 +394,13 @@ public class RLJoinOrderRule extends RelOptRule {
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
+
+    //RelOptCost optCost = mq.getCumulativeCost(optNode, isNonLinearCostModel);
+    //zmq.optimizedCosts.put("RL", optCost.getRows());
+    //System.out.println("optimized cost at end of RL: " + optCost.getRows());
+    //String optPlan = RelOptUtil.dumpPlan("optimized plan:", optNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+    //System.out.println(optPlan);
+
     call.transformTo(optNode);
   }
 
