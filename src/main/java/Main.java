@@ -21,6 +21,10 @@ class Main {
       mode.setRequired(false);
       options.addOption(mode);
 
+      Option onlyFinalReward = new Option("onlyFinalReward", "onlyFinalReward", true, "boolean");
+      onlyFinalReward.setRequired(false);
+      options.addOption(onlyFinalReward);
+
       CommandLineParser parser = new DefaultParser();
       HelpFormatter formatter = new HelpFormatter();
       CommandLine cmd = null;
@@ -42,8 +46,12 @@ class Main {
     Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query"));
     Integer port = Integer.parseInt(cmd.getOptionValue("port"));
     String mode = cmd.getOptionValue("mode", "train");
+    Integer onlyFinalReward = Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0"));
+
     System.out.println("using zmq port " + port);
     System.out.println("mode " + mode);
+    System.out.println("onlyFinalReward " + onlyFinalReward);
+    System.out.println("boolean onlyFinalReward " + (onlyFinalReward==1));
 
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     // TODO: add command line flags for these
@@ -56,7 +64,7 @@ class Main {
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.ORIG_JOIN_ORDER);
     QueryOptExperiment exp = null;
     try {
-        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port);
+        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward==1);
     } catch (Exception e) {
         System.err.println("Sql Exception!");
         throw e;
@@ -86,6 +94,7 @@ class Main {
 
     } else {
       queries.add(nextQuery);
+      System.out.println(exp.allSqlQueries.get(nextQuery));
     }
     QueryOptExperiment.getZMQServer().curQuerySet = queries;
     if (mode.equals("train")) {

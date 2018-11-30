@@ -2,7 +2,7 @@ from torch import optim
 import torch
 from query_opt_env import QueryOptEnv
 import argparse
-from utils.net import TestQNetwork
+from utils.net import TestQNetwork, CostModelNetwork
 from utils.logger import Logger
 # from utils.utils import copy_network, save_network, get_model_names, to_variable
 from utils.utils import *
@@ -28,7 +28,7 @@ FILL_UP_GOOD_RUNS = False
 
 # TODO: execute multiple runs together
 JAVA_PROCESS = None
-USE_LOPT = False
+USE_LOPT = True
 
 def to_bitset(num_attrs, arr):
     ret = [i for i, val in enumerate(arr) if val == 1.0]
@@ -80,7 +80,11 @@ def read_flags():
                                 default=1, help="")
     parser.add_argument("-test", type=int, required=False,
                                 default=0, help="")
+    parser.add_argument("-train_reward_func", type=int, required=False,
+                                default=0, help="")
     parser.add_argument("-verbose", type=int, required=False,
+                                default=0, help="")
+    parser.add_argument("-only_final_reward", type=int, required=False,
                                 default=0, help="")
 
     parser.add_argument("-dir", type=str, required=False,
@@ -113,7 +117,9 @@ def find_cost(planOutput):
 
 def start_java_server(args):
     global JAVA_PROCESS
-    JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main -Dexec.args="-query {query} -port {port} -mode {mode}"'
+    JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
+    -Dexec.args="-query {query} -port {port} -mode {mode} -onlyFinalReward \
+    {final_reward}"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
     mode = ""
@@ -123,13 +129,102 @@ def start_java_server(args):
         mode = "test"
 
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
-            mode=mode)
+            mode=mode, final_reward=args.only_final_reward)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")
 
+def adjust_learning_rate(args, optimizer, epoch):
+    """
+    Sets the learning rate to the initial LR decayed by 10 every 30 epochs
+    """
+    # lr = args.lr * (0.1 ** (epoch // 30))
+    lr = args.lr * (0.5 ** (epoch // 30))
+    print("new lr is: ", lr)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+def train_reward_func(args):
+    assert args.only_final_reward, "train reward func only for this scenario"
+    env = QueryOptEnv(port=args.port, only_final_reward=args.only_final_reward)
+
+    ################## Visdom Stuff ######################
+    if args.visdom:
+        env_name = "queries: " + str(env.query_set) + "-plots-" + args.suffix
+        # FIXME: just loop over all args.
+        viz_params = TextVisualizer("Parameters",env=env_name)
+        params_text = str(args)
+        viz_params.update(params_text)
+
+        viz_ep_loss = ScalarVisualizer("per episode loss", env=env_name,
+                opts={"xlabel":"episode", "ylabel":"Reward - Sum(EstimatedRewards)",
+                    "title":"Difference of Reward and Estimated Reward"})
+        viz_reward_estimates = ScalarVisualizer("reward estimates", env=env_name,
+                opts={"xlabel":"mdp step", "ylabel":"reward estimates", "markersize":30,
+                    "show_legend":True})
+
+    ################## End Visdom Stuff ######################
+
+    num_input_features = env.get_num_input_features()
+
+    R = CostModelNetwork(num_input_features)
+    # Init network optimizer
+    optimizer = optim.RMSprop(
+        R.parameters(), lr=args.lr, alpha=0.95, eps=.01  # ,momentum=0.95,
+    )
+
+    for ep in range(args.num_episodes):
+        print("ep: ", ep)
+        adjust_learning_rate(args, optimizer, ep)
+
+        # don't know precise episode lengths, changes based on query
+        done = False
+        env.reset()
+        cur_ep_it = 0
+        # per episode comparison between rewards / and qvals
+        true_rewards = []
+        # ep_estimated_rewards = []
+        phi_batch = []
+        final_reward = 0
+        while not done:
+            cur_ep_it += 1
+            state = env._get_state()
+            actions = env.action_space()
+            # just take the action randomly since we are just trying to learn
+            # the cost model, and not an optimal policy
+            action_index = random.choice(range(len(actions)))
+            # action_index = 0
+            new_state, reward, done = env.step(action_index)
+            true_reward = env.get_true_reward()
+            true_rewards.append(true_reward)
+            final_reward += reward
+            assert new_state == state, "should be same in berkeley featurization"
+            # ep_rewards.append(reward)
+            phi_batch.append(state + actions[action_index])
+
+        phi_batch = to_variable(phi_batch).float()
+        est_rewards = R(phi_batch)
+        est_rewards_sum = est_rewards.sum()
+        est_loss = float((final_reward - est_rewards_sum).data.cpu().numpy()[0])
+        print("est loss: ", est_loss)
+
+        # TODO: training + minibatching
+        # episode is done!
+        learning_loss = gradient_descent(est_rewards_sum, final_reward, optimizer)
+        print("learning loss: ", learning_loss.data.cpu().numpy())
+
+        ########### updating visdom  #############
+        if args.visdom:
+            viz_ep_loss.update(ep, est_loss)
+
+            assert len(est_rewards) == len(true_rewards), 'test'
+            viz_reward_estimates.update(range(len(est_rewards)), est_rewards,
+                        update="replace", name="estimated values")
+            viz_reward_estimates.update(range(len(est_rewards)), true_rewards,
+                        update="replace", name="true reward values")
+
 def train(args):
-    env = QueryOptEnv(args.port)
+    env = QueryOptEnv(port=args.port, only_final_reward=args.only_final_reward)
 
     ################## Visdom Stuff ######################
     if args.visdom:
@@ -142,9 +237,9 @@ def train(args):
         viz_ep_costs = ScalarVisualizer("costs", env=env_name,
                 opts={"xlabel":"episode", "ylabel":"costs",
                     "title":ep_costs_title})
-        viz_qval_stats = ScalarVisualizer("QVals", env=env_name,
-                opts={"xlabel":"episode", "ylabel":"QValue",
-                    "title":"QValue Stats"})
+        # viz_qval_stats = ScalarVisualizer("QVals", env=env_name,
+                # opts={"xlabel":"episode", "ylabel":"QValue",
+                    # "title":"QValue Stats"})
 
         viz_real_loss = ScalarVisualizer("real-loss", env=env_name,
                 opts={"xlabel":"episode", "ylabel":"Reward - QValue",
@@ -157,12 +252,6 @@ def train(args):
 
         # FIXME: just loop over all args.
         viz_params = TextVisualizer("Parameters",env=env_name)
-        # params_text = ("minibatch size: {}\r\n, learning rate: {}\r\n".format(args.minibatch_size, args.lr))
-        # params_text = "minibatch size: {}\r\n".format(args.minibatch_size)
-        # params_text += "learning rate: {}\r\n".format(args.lr)
-        # params_text += "num episodes: {}\r\n".format(args.num_episodes)
-        # params_text += "replay memory size: {}\r\n".format(args.replay_memory_size)
-        # params_text += "decay steps: {}\r\n".format(args.decay_steps)
         params_text = str(args)
         viz_params.update(params_text)
 
@@ -196,6 +285,7 @@ def train(args):
         print("number of saved models: ", len(model_names))
 
     for ep in range(args.num_episodes):
+        print("ep: ", ep)
         if args.debug:
             # let's change Q based on saved models
             if ep > len(model_names):
@@ -232,7 +322,7 @@ def train(args):
             assert new_state == state, "should be same in berkeley featurization"
             ep_rewards.append(reward)
             if args.verbose:
-                print("step: {}, reward: {}".format(step, reward))
+                print("cur_ep_it: {}, reward: {}".format(cur_ep_it, reward))
             ep_qvals.append(qvalue)
             # print("at episode {}, reward: {}, qval: {}".format(cur_ep_it,
                 # reward, qval))
@@ -301,23 +391,30 @@ def train(args):
 
             # lopt_cost = find_cost(lopt_plan)
             if USE_LOPT:
-                viz_ep_costs.update(ep, lopt_cost,
+                # FIXME: temporary special casing
+                if args.query < 0:
+                    viz_ep_costs.update(ep, math.log(lopt_cost),
                         name="LOpt")
-            viz_ep_costs.update(ep, rl_cost,
-                    name="RL")
-            # viz_ep_costs.update(ep, math.log(lopt_cost),
-                    # name="LOpt")
-            # viz_ep_costs.update(ep, math.log(rl_cost),
-                    # name="RL")
+                else:
+                    viz_ep_costs.update(ep, lopt_cost,
+                            name="LOpt")
+            if args.query < 0:
+                viz_ep_costs.update(ep, math.log(rl_cost),
+                        name="RL")
+            else:
+                viz_ep_costs.update(ep, rl_cost,
+                        name="RL")
+
             sorted_ep_qvals = sorted(ep_qvals)
             maxQVal = sorted_ep_qvals[-1]
             max2QVal = sorted_ep_qvals[-2]
             minQVal = sorted_ep_qvals[0]
             assert maxQVal >= max2QVal, "check"
-            viz_qval_stats.update(ep, abs(maxQVal-max2QVal), name="Qmax - Qmax2")
-            viz_qval_stats.update(ep, abs(maxQVal - (sum(ep_qvals) /
-                float(len(ep_qvals)))), name="Qmax - Qmean")
-            viz_qval_stats.update(ep, abs(maxQVal - minQVal), name="Qmax-Qmin")
+            # FIXME: this is wrong right now.
+            # viz_qval_stats.update(ep, abs(maxQVal-max2QVal), name="Qmax - Qmax2")
+            # viz_qval_stats.update(ep, abs(maxQVal - (sum(ep_qvals) /
+                # float(len(ep_qvals)))), name="Qmax - Qmean")
+            # viz_qval_stats.update(ep, abs(maxQVal - minQVal), name="Qmax-Qmin")
 
             # viz_rl_plan.update(convert_to_html(rl_plan))
             # viz_lopt_plan.update(convert_to_html(lopt_plan))
@@ -409,6 +506,8 @@ def main():
     start_java_server(args)
     time.sleep(0.01)
     try:
+        if args.train_reward_func:
+            train_reward_func(args)
         if args.train:
             train(args)
         if args.test:

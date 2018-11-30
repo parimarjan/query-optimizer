@@ -142,6 +142,7 @@ public class QueryOptExperiment {
 
     private boolean executeOnDB;
     private static boolean isNonLinearCostModel;
+    private static boolean onlyFinalReward;
 
     /*
     *************************************************************************
@@ -155,13 +156,14 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port) throws SQLException {
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward) throws SQLException {
         // FIXME: make this as a variable arg.
-        executeOnDB = false;
-        isNonLinearCostModel = false;
-        conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+        this.executeOnDB = false;
+        this.isNonLinearCostModel = false;
+        this.onlyFinalReward = onlyFinalReward;
+        this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
-        zmq = new ZeroMQServer(port);
+        this.zmq = new ZeroMQServer(port);
 
         this.plannerTypes = plannerTypes;
         volcanoPlanners = new ArrayList<Planner>();
@@ -330,6 +332,10 @@ public class QueryOptExperiment {
 
     public static boolean isNonLinearCostModel() {
       return isNonLinearCostModel;
+    }
+
+    public static boolean onlyFinalReward() {
+      return onlyFinalReward;
     }
 
     public static ZeroMQServer getZMQServer() {

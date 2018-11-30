@@ -24,6 +24,7 @@ public class ZeroMQServer {
   public boolean reset = false;
   public int episodeDone = 0;
   public double lastReward = 0;
+  public double lastTrueReward = 0;
   public double scanCost = 0;
   public String query = "";
 
@@ -124,6 +125,9 @@ public class ZeroMQServer {
         break;
       case "getReward":
         resp = lastReward;
+        break;
+      case "getTrueReward":
+        resp = lastTrueReward;
         break;
       case "isDone":
         resp = episodeDone;

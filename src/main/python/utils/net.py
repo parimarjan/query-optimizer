@@ -24,3 +24,25 @@ class TestQNetwork(nn.Module):
         x = self.linear1(x)
         x = self.out(x)
         return x
+
+class CostModelNetwork(nn.Module):
+
+    def __init__(self, I):
+        super(CostModelNetwork, self).__init__()
+	H_scale = 1
+        self.linear1 = nn.Sequential(
+            nn.Linear(I, I*H_scale, bias=True),
+            nn.ReLU()
+        )
+        self.out = nn.Sequential(
+            nn.Linear(I*H_scale, 1, bias=True),
+        )
+
+        # Init with cuda if available
+	if torch.cuda.is_available():
+	    self.cuda()
+
+    def forward(self, x):
+        # x = self.linear1(x)
+        x = self.out(x)
+        return x

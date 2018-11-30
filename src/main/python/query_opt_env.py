@@ -5,6 +5,7 @@ import ast
 import random
 import numpy as np
 
+COMMON_MIN_MAX = True
 DEFAULT_PORT = 5600
 def get_port():
     context = zmq.Context()
@@ -27,9 +28,7 @@ class QueryOptEnv():
     Follow all the conventions of openai gym but haven't figured out all the
     details to make it an openai environment yet.
     """
-
-
-    def __init__(self, port=5605):
+    def __init__(self, port=5605, only_final_reward=0):
         """
         TODO: init the zeromq server and establish connection etc.
         """
@@ -46,14 +45,19 @@ class QueryOptEnv():
         # side using some protocol.
         self.only_join_condition_attributes = False
 
+        self.only_final_reward = only_final_reward
         # parameters
-        self.reward_damping_factor = 1.00
+        self.reward_damping_factor = 100000.00
+        # self.reward_damping_factor = 1.00
         # will store min_reward / max_reward for each unique query
         # will map query: (min_reward, max_reward)
         self.reward_mapper = {}
         # these values will get updated in reset.
         self.min_reward = None
         self.max_reward = None
+        # FIXME: this is getting too convoluted
+        self.common_min_reward = 10000000
+        self.common_max_reward = -10000000
 
     def run_random_episode(self):
         '''
@@ -96,7 +100,7 @@ class QueryOptEnv():
         # stupid hack, but otherwise we weren't able to close / start the
         # server in time. And somehow without the close / start after sending a
         # reply from the server, it would just go crazy with polling stuff
-        time.sleep(0.05)
+        time.sleep(0.10)
         self.socket.send(msg)
         ret = self.socket.recv()
 	return ret
@@ -141,9 +145,19 @@ class QueryOptEnv():
         done = int(self.send(b"isDone"))
         return ob, reward, done
 
+    def get_true_reward(self):
+        '''
+        Note: only makes sense for final reward scenario.
+        '''
+        assert self.only_final_reward, 'sanity check'
+        true_reward = float(self.send(b"getTrueReward"))
+        true_reward = self.normalize_reward(true_reward)
+        return true_reward
+
     def normalize_reward(self, reward):
+        if self.only_final_reward:
+            return reward / self.reward_damping_factor
         # to keep rewards positive, shouldn't matter I guess?
-        # reward /= self.reward_damping_factor
         if self.min_reward is not None:
             reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
             # reward = self.scale_reward(reward)
@@ -166,14 +180,26 @@ class QueryOptEnv():
         # we want to be able to figure out which query this was so we can set
         # the appropriate max / min ranges to scale the rewards.
         if query in self.reward_mapper:
-            self.min_reward = self.reward_mapper[query][0]
-            self.max_reward = self.reward_mapper[query][1]
+            if COMMON_MIN_MAX:
+                self.min_reward = self.common_min_reward
+                self.max_reward = self.common_max_reward
+            else:
+                self.min_reward = self.reward_mapper[query][0]
+                self.max_reward = self.reward_mapper[query][1]
         else:
             # FIXME: dumb hack so self.step does right thing when executing
             # random episode.
             self.min_reward = None
             self.max_reward = None
-            self.min_reward, self.max_reward = self.run_random_episode()
+            if COMMON_MIN_MAX:
+                min_reward, max_reward = self.run_random_episode()
+                if min_reward < self.common_min_reward:
+                    self.common_min_reward = min_reward
+                if max_reward > self.common_max_reward:
+                    self.common_max_reward = max_reward
+            else:
+                self.min_reward, self.max_reward = self.run_random_episode()
+
             self.reward_mapper[query] = (self.min_reward, self.max_reward)
 
             # FIXME: dumb hack

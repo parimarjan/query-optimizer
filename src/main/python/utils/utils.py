@@ -14,9 +14,9 @@ def to_variable(arr):
     if isinstance(arr, list) or isinstance(arr, tuple):
         arr = np.array(arr)
     if isinstance(arr, np.ndarray):
-        arr = Variable(torch.from_numpy(arr))
+        arr = Variable(torch.from_numpy(arr), requires_grad=True)
     else:
-        arr = Variable(arr)
+        arr = Variable(arr, requires_grad=True)
 
     if torch.cuda.is_available():
         arr = arr.cuda()

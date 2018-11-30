@@ -86,6 +86,8 @@ public class RLJoinOrderRule extends RelOptRule {
   // TODO: just set this to what we want.
   //private final PrintWriter pw = Util.printWriter(System.out);
   private final PrintWriter pw = null;
+  private boolean isNonLinearCostModel;
+  private boolean onlyFinalReward;
 
   /** Creates an RLJoinOrderRule. */
   public RLJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -117,14 +119,18 @@ public class RLJoinOrderRule extends RelOptRule {
     this(RelBuilder.proto(joinFactory, projectFactory));
   }
 
-  @Override public void onMatch(RelOptRuleCall call) {
+  @Override
+  public void onMatch(RelOptRuleCall call) {
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // tmp: using it for cost estimation.
     final RelOptPlanner planner = call.getPlanner();
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
-    boolean isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
+    isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
+    onlyFinalReward = QueryOptExperiment.onlyFinalReward();
+    //System.out.println("only final reward is: " + onlyFinalReward);
+
     //final RelMetadataQuery mq = call.getMetadataQuery();
     final MyMetadataQuery mq = MyMetadataQuery.instance();
 
@@ -173,6 +179,9 @@ public class RLJoinOrderRule extends RelOptRule {
         //// time to collapse the edges!
       //}
     //}
+    //System.out.println("size of unusedEdges: " + unusedEdges.size());
+    // only used for finalReward scenario
+    Double costSoFar = 0.00;
     for (;;) {
       // each edge is equivalent to a possible action, and must be represented
       // by its features
@@ -205,6 +214,10 @@ public class RLJoinOrderRule extends RelOptRule {
           edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
         }
       } else {
+        // technically, looks like it should work even if we don't set this
+        // here.
+        //System.out.println("setting edgeOrdinal to -1");
+        zmq.episodeDone = 1;
         edgeOrdinal = -1;
       }
 
@@ -219,6 +232,7 @@ public class RLJoinOrderRule extends RelOptRule {
         final Vertex lastVertex = Util.last(vertexes);
         final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
         if (z < 0) {
+          //System.out.println("going to break out of the loop");
           break;
         }
         factors = new int[] {z, lastVertex.id};
@@ -282,18 +296,30 @@ public class RLJoinOrderRule extends RelOptRule {
           * minorVertex.cost
           * RelMdUtil.guessSelectivity(
               RexUtil.composeConjunction(rexBuilder, conditions, false));
-      //System.out.println("orig cost for action: " + cost);
       if (isNonLinearCostModel) {
         cost = mq.getNonLinearCount(cost);
-        //System.out.println("non linear cost: " + cost);
       }
 
       final Vertex newVertex =
           new JoinVertex(v, majorFactor, minorFactor, newFactors,
               cost, ImmutableList.copyOf(conditions), newFeatures);
       vertexes.add(newVertex);
-      // treat this as the reward signal.
-      zmq.lastReward = -cost;
+      if (onlyFinalReward) {
+        // reward will be 0.00 until the very end when we throw everything at
+        // them.
+        // FIXME: is this condition enough?
+        zmq.lastTrueReward = -cost;
+        costSoFar += cost;
+        if (unusedEdges.size() == 0) {
+          zmq.lastReward = -costSoFar;
+        } else {
+          zmq.lastReward = 0.00;
+        }
+      } else {
+        // treat this as the reward signal.
+        zmq.lastReward = -cost;
+        //System.out.println("set last reward as: " + zmq.lastReward);
+      }
 
       // Re-compute selectivity of edges above the one just chosen.
       // Suppose that we just chose the edge between "product" (10k rows) and
@@ -325,6 +351,7 @@ public class RLJoinOrderRule extends RelOptRule {
       if (unusedEdges.size() == 0) {
         zmq.episodeDone = 1;
       } else zmq.episodeDone = 0;
+      //System.out.println("going to wait till getReward");
       zmq.waitForClientTill("getReward");
     }
 
@@ -394,13 +421,6 @@ public class RLJoinOrderRule extends RelOptRule {
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
-
-    //RelOptCost optCost = mq.getCumulativeCost(optNode, isNonLinearCostModel);
-    //zmq.optimizedCosts.put("RL", optCost.getRows());
-    //System.out.println("optimized cost at end of RL: " + optCost.getRows());
-    //String optPlan = RelOptUtil.dumpPlan("optimized plan:", optNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
-    //System.out.println(optPlan);
-
     call.transformTo(optNode);
   }
 
