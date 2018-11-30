@@ -37,14 +37,22 @@ class QueryOptEnv():
         context = zmq.Context()
         #  Socket to talk to server
         print("Going to connect to calcite server")
-        self.socket = context.socket(zmq.REQ)
+        # self.socket = context.socket(zmq.REQ)
+        self.socket = context.socket(zmq.PAIR)
         self.socket.connect("tcp://localhost:" + str(port))
+
+        # FIXME: do we want poller?
+        # self.poller = zmq.Poller()
+        # self.poller.register(self.socket, zmq.POLLIN)
+
         self.query_set = self.send("getCurQuerySet")
         self.attr_count = int(self.send("getAttrCount"))
+
+        # FIXME: these variable don't neccessarily belong here / should be
+        # cleaned up
         # TODO: figure this out using the protocol too. Or set it on the java
         # side using some protocol.
         self.only_join_condition_attributes = False
-
         self.only_final_reward = only_final_reward
         # parameters
         self.reward_damping_factor = 100000.00
@@ -100,8 +108,34 @@ class QueryOptEnv():
         # stupid hack, but otherwise we weren't able to close / start the
         # server in time. And somehow without the close / start after sending a
         # reply from the server, it would just go crazy with polling stuff
-        time.sleep(0.10)
+        # time.sleep(0.10)
+        # FIXME: might want to send using a different socket in which we are
+        # the sender?
         self.socket.send(msg)
+        # ret = None
+        # while ret is None:
+	    # socks = dict(self.poller.poll(1000))
+	    # if socks:
+		# if socks.get(self.socket) == zmq.POLLIN:
+                    # ret = self.socket.recv(zmq.NOBLOCK)
+	    # else:
+		# print "error: message timeout"
+                # time.sleep(0.10)
+                # self.socket.send(msg)
+        # assert ret is not None, 'test'
+
+        ret = None
+        # FIXME: using poller might make this better in general.
+        # while ret is None:
+            # # this can fail because the java calcite server might still be
+            # # executing based on the last thing we sent, so it might not be
+            # # ready with a reply yet.
+            # try:
+                # ret = self.socket.recv(zmq.NOBLOCK)
+            # except:
+                # # don't want to waste too much time
+                # time.sleep(0.10)
+        # assert ret is not None
         ret = self.socket.recv()
 	return ret
 

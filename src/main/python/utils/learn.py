@@ -3,19 +3,17 @@ from utils import to_variable
 import random
 import torch
 
-MIN_EPS = 0.05
-def egreedy_action(Q, state, actions, step, decay_steps=1000.00, greedy=False):
+def egreedy_action(Q, state, actions, step, decay_steps=1000.00, greedy=False,
+        min_eps=0.05):
     '''
     step is only useful for annealed epsilon.
     '''
      # Initial values
-    initial_epsilon, final_epsilon = 1.0, MIN_EPS
+    initial_epsilon, final_epsilon = 1.0, min_eps
     # Calculate step size to move from final to initial epsilon with #decay_steps
     step_size = (initial_epsilon - final_epsilon) / decay_steps
     # Calculate annealed epsilon
     ann_eps = initial_epsilon - step * step_size
-    # Define allowsd min. epsilon
-    min_eps = MIN_EPS
     # Set epsilon as max(min_eps, annealed_epsilon)
     epsilon = max(min_eps, ann_eps)
 

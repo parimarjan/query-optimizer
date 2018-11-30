@@ -37,32 +37,29 @@ public class ZeroMQServer {
 
   public ZeroMQServer(int port) {
     this.port = Integer.toString(port);
-  }
-
-  public ZeroMQServer() {
-    ZMQ.Context reqContext = ZMQ.context(1);
-    ZMQ.Socket requester = reqContext.socket(ZMQ.REQ);
-		//  Socket to talk to server
-    requester.connect("tcp://localhost:2000");
-    requester.send("java".getBytes(), 0);
-    this.port = new String(requester.recv(0));
+    context = ZMQ.context(1);
+    responder = context.socket(ZMQ.PAIR);
+    responder.bind("tcp://*:" + this.port);
   }
 
   public void restart() throws Exception {
-      context = ZMQ.context(ZMQ.REP);
-      responder = context.socket(ZMQ.REP);
-      responder.bind("tcp://*:" + this.port);
+      //context = ZMQ.context(ZMQ.REP);
+      //responder = context.socket(ZMQ.REP);
+
+      //context = ZMQ.context(ZMQ.PAIR);
+      //responder = context.socket(ZMQ.PAIR);
+      //responder.bind("tcp://*:" + this.port);
   }
 
   public void close() {
-      responder.close();
-      context.term();
+      //responder.close();
+      //context.term();
   }
 
   // returns the command string sent by the client.
   public String waitForCommand() throws Exception {
     // FIXME: is it bad to reset the connection every time?
-    restart();
+    // restart();
     //System.out.println("java server waiting for a command");
     String msg;
     byte[] request = responder.recv(0);
@@ -133,7 +130,7 @@ public class ZeroMQServer {
         resp = episodeDone;
         break;
       default:
-        close();
+        //close();
         return msg;
     }
 
@@ -155,7 +152,7 @@ public class ZeroMQServer {
         System.exit(-1);
     }
 
-    close();
+    //close();
     return msg;
   }
 

@@ -56,7 +56,7 @@ class Main {
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     // TODO: add command line flags for these
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
-    //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
+    plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RANDOM);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.DEBUG);
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.BUSHY);

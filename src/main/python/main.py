@@ -73,6 +73,8 @@ def read_flags():
             help="Query to execute. -1 means all queries")
     parser.add_argument("-lr", type=float, required=False,
                                 default=0.001, help="")
+    parser.add_argument("-min_eps", type=float, required=False,
+                                default=0.05, help="")
     # boolean
     parser.add_argument("-debug", type=int, required=False,
                                 default=0, help="")
@@ -174,8 +176,9 @@ def train_reward_func(args):
     )
 
     for ep in range(args.num_episodes):
-        print("ep: ", ep)
-        adjust_learning_rate(args, optimizer, ep)
+
+        # FIXME: should we be doing this in general or not?
+        # adjust_learning_rate(args, optimizer, ep)
 
         # don't know precise episode lengths, changes based on query
         done = False
@@ -316,7 +319,7 @@ def train(args):
             actions = env.action_space()
             # assert check_actions_in_state(env.attr_count, state, actions), "actions must be in state"
             action_index, qvalue, epsilon = egreedy_action(Q, state, actions, step,
-                    decay_steps=args.decay_steps)
+                    decay_steps=args.decay_steps, min_eps=args.min_eps)
 
             new_state, reward, done = env.step(action_index)
             assert new_state == state, "should be same in berkeley featurization"
@@ -344,8 +347,9 @@ def train(args):
                 num_action_choices = len(new_state_actions_mb[0]) - done_mb[0]
 
                 loss = gradient_descent(qtargets, qvals, optimizer)
-                # print("step: {}, loss: {}, qtargets-qvals: {}, epsilon: {}".format(step,
-                    # loss.data[0], qdiff, epsilon))
+                if args.verbose:
+                    print("step: {}, loss: {}, qtargets-qvals: {}, epsilon: {}".format(step,
+                        loss.data[0], qdiff, epsilon))
 
                 # FIXME: debug stuff
                 # print("step: {}, loss: {}, qtargets-qvals: {}, num_actions: {}, reward: {}, epsilon: {}".format(step, loss.data[0], qdiff,
@@ -504,7 +508,7 @@ def cleanup():
 def main():
     args = read_flags()
     start_java_server(args)
-    time.sleep(0.01)
+    time.sleep(5)
     try:
         if args.train_reward_func:
             train_reward_func(args)
