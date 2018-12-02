@@ -17,9 +17,6 @@ def egreedy_action(Q, state, actions, step, decay_steps=1000.00, greedy=False,
     # Set epsilon as max(min_eps, annealed_epsilon)
     epsilon = max(min_eps, ann_eps)
 
-    # Obtain a random value in range [0,1)
-    rand = np.random.uniform()
-
     # FIXME: for debugging, we always calculate the optimal Qvalue, and return
     # it, even if we are using epsilon.
     # With probability e select random action a_t
@@ -39,17 +36,21 @@ def egreedy_action(Q, state, actions, step, decay_steps=1000.00, greedy=False,
 
     phi_batch = to_variable(np.array(phi_batch)).float()
     all_rewards = Q(phi_batch)
-    best_val, best_action = all_rewards.max(0)
+    _, best_action = all_rewards.max(0)
+    all_qvals = all_rewards.data.cpu().numpy().flatten()
     best_action = int(best_action.data.cpu().numpy()[0][0])
 
     # Note: can also find it like this, but converting best_action to cpu would
     # be slow for choosing every action.
     # best_reward, best_action = all_vals.data.max(0)
     # print("best action = ", best_action[0])
+
+    # Obtain a random value in range [0,1)
+    rand = np.random.uniform()
     if rand < epsilon and not greedy:
         best_action = random.choice(range(len(actions)))
 
-    return best_action, best_val.data.cpu().numpy()[0][0], epsilon
+    return best_action, all_qvals, epsilon
 
 def Qvalues(state_mb, actions_mb, Q):
     '''

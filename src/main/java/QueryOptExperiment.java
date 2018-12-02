@@ -247,7 +247,6 @@ public class QueryOptExperiment {
         zmq.query = query;
         zmq.waitForClientTill("reset");
         zmq.reset = false;
-        System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {
@@ -270,7 +269,7 @@ public class QueryOptExperiment {
         zmq.query = query;
         zmq.waitForClientTill("reset");
         zmq.reset = false;
-        System.out.println("next query: " + nextQuery);
+        //System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {
@@ -312,7 +311,7 @@ public class QueryOptExperiment {
         zmq.query = query;
         zmq.waitForClientTill("reset");
         zmq.reset = false;
-        System.out.println("next query: " + nextQuery);
+        //System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {

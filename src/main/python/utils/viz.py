@@ -74,9 +74,6 @@ class ScalarVisualizer(Visualizer):
         v = np.expand_dims(v, 0)
     else:
         pass
-        # update == replace
-        # t = np.array(t)
-        # v = np.array(v)
 
     self.vis.line(
         v,
@@ -103,7 +100,7 @@ class HistogramVisualizer(Visualizer):
 
   def update(self, data, numbins=30, caption=None):
     self.vis.histogram(
-        data, 
+        data,
         opts={'numbins': numbins,
               'caption':caption,
               'title': "{}".format(self.name)},

@@ -6,29 +6,15 @@ import random
 import numpy as np
 
 COMMON_MIN_MAX = True
-DEFAULT_PORT = 5600
-def get_port():
-    context = zmq.Context()
-    #  Socket to talk to server
-    print("Going to connect to port server")
-    socket = context.socket(zmq.REQ)
-    socket.connect("tcp://localhost:2000")
-    # TODO: make it only wait for limited time
-    time.sleep(0.1)
-    socket.send(b"python")
-    ret = socket.recv()
-    print("received: ", ret)
-    return ret
-
-    # return DEFAULT_PORT
-
 
 class QueryOptEnv():
     """
     Follow all the conventions of openai gym but haven't figured out all the
     details to make it an openai environment yet.
     """
-    def __init__(self, port=5605, only_final_reward=0):
+    def __init__(self, port=5605, only_final_reward=0,
+                reward_normalization="", reward_damping=0,
+                clip_min_max=0):
         """
         TODO: init the zeromq server and establish connection etc.
         """
@@ -40,6 +26,9 @@ class QueryOptEnv():
         # self.socket = context.socket(zmq.REQ)
         self.socket = context.socket(zmq.PAIR)
         self.socket.connect("tcp://localhost:" + str(port))
+        self.reward_normalization = reward_normalization
+        self.reward_damping = reward_damping
+        self.clip_min_max = clip_min_max
 
         # FIXME: do we want poller?
         # self.poller = zmq.Poller()
@@ -112,30 +101,8 @@ class QueryOptEnv():
         # FIXME: might want to send using a different socket in which we are
         # the sender?
         self.socket.send(msg)
-        # ret = None
-        # while ret is None:
-	    # socks = dict(self.poller.poll(1000))
-	    # if socks:
-		# if socks.get(self.socket) == zmq.POLLIN:
-                    # ret = self.socket.recv(zmq.NOBLOCK)
-	    # else:
-		# print "error: message timeout"
-                # time.sleep(0.10)
-                # self.socket.send(msg)
-        # assert ret is not None, 'test'
-
-        ret = None
         # FIXME: using poller might make this better in general.
-        # while ret is None:
-            # # this can fail because the java calcite server might still be
-            # # executing based on the last thing we sent, so it might not be
-            # # ready with a reply yet.
-            # try:
-                # ret = self.socket.recv(zmq.NOBLOCK)
-            # except:
-                # # don't want to waste too much time
-                # time.sleep(0.10)
-        # assert ret is not None
+        ret = None
         ret = self.socket.recv()
 	return ret
 
@@ -189,17 +156,28 @@ class QueryOptEnv():
         return true_reward
 
     def normalize_reward(self, reward):
-        if self.only_final_reward:
-            return reward / self.reward_damping_factor
-        # to keep rewards positive, shouldn't matter I guess?
-        if self.min_reward is not None:
-            reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
-            # reward = self.scale_reward(reward)
+        # FIXME: is this really needed?
+        # if self.only_final_reward:
+            # return reward / self.reward_damping_factor
+        assert not (self.reward_damping and self.reward_normalization ==
+                "min_max"), "both of these should not be on at same time"
+        if self.reward_damping:
+            reward = reward / self.reward_damping_factor
+
+
+        if self.reward_normalization == "min_max":
+            # to keep rewards positive, shouldn't matter I guess?
+            if self.min_reward is not None:
+                if not self.clip_min_max:
+                    reward = (reward-self.min_reward)/float((self.max_reward-self.min_reward))
+                else:
+                    reward = np.interp(reward, [self.min_reward, self.max_reward], [0,1])
+
+        elif self.reward_normalization == "":
+            pass
+
         return reward
 
-    def scale_reward(self, reward):
-        # return (reward-self.min_reward)/(self.max_reward-self.min_reward)
-        return reward / 30e6
 
     def reset(self):
         """
@@ -207,10 +185,6 @@ class QueryOptEnv():
         """
         # send a reset message to the server
         query = self.send(b"reset")
-        # print("reset. Next query is: ", query)
-        # print("self.reward mapper is: ")
-        # for k, v in self.reward_mapper.iteritems():
-            # print(v)
         # we want to be able to figure out which query this was so we can set
         # the appropriate max / min ranges to scale the rewards.
         if query in self.reward_mapper:
