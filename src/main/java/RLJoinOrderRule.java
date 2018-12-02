@@ -34,16 +34,13 @@ import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mappings;
-
 import com.google.common.collect.ImmutableList;
-
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-
 import static org.apache.calcite.util.mapping.Mappings.TargetMapping;
 
 // new ones
@@ -120,24 +117,30 @@ public class RLJoinOrderRule extends RelOptRule {
   }
 
   @Override
-  public void onMatch(RelOptRuleCall call) {
+  public void onMatch(RelOptRuleCall call)
+  {
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
-    // tmp: using it for cost estimation.
-    final RelOptPlanner planner = call.getPlanner();
+    // this is required if we want to use node.computeSelfCost()
+    // final RelOptPlanner planner = call.getPlanner();
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
     isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
     onlyFinalReward = QueryOptExperiment.onlyFinalReward();
-    //System.out.println("only final reward is: " + onlyFinalReward);
-
-    //final RelMetadataQuery mq = call.getMetadataQuery();
+		// wrapper around RelMetadataQuery, to add support for non linear cost
+    // models.
     final MyMetadataQuery mq = MyMetadataQuery.instance();
 
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
-    final List<Vertex> vertexes = new ArrayList<>();
+    final List<QueryGraphUtils.Vertex> vertexes = new ArrayList<>();
     int x = 0;
     Double scanCost = 0.0;
+    // Sequence of relNodes that are used to build the final optimized relNode
+    // one join at a time.
+    List<Pair<RelNode, TargetMapping>> optRelNodes = new ArrayList<>();
+    QueryGraphUtils qGraphUtils = new QueryGraphUtils(pw);
+
+    // Add the orignal tables as vertexes
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
@@ -146,24 +149,186 @@ public class RLJoinOrderRule extends RelOptRule {
         cost = mq.getNonLinearCount(cost);
       }
       scanCost += cost;
-      vertexes.add(new LeafVertex(i, rel, cost, x));
+      QueryGraphUtils.Vertex newVertex = new QueryGraphUtils.LeafVertex(i, rel, cost, x);
+      vertexes.add(newVertex);
+      qGraphUtils.updateRelNodes(newVertex, optRelNodes, rexBuilder, relBuilder, multiJoin);
       x += rel.getRowType().getFieldCount();
     }
     zmq.scanCost = scanCost;
-
     assert x == multiJoin.getNumTotalFields();
 
     final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
     for (RexNode node : multiJoin.getJoinFilters()) {
       unusedEdges.add(multiJoin.createEdge2(node));
     }
-
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
     zmq.state = new ArrayList<Integer>(mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures(), multiJoin).toList());
-
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
+    // only used for finalReward scenario
+    Double costSoFar = 0.00;
+    for (;;) {
+      // break condition
+      final int[] factors;
+      if (unusedEdges.size() == 0) {
+        // No more edges. Are there any un-joined vertexes?
+        zmq.episodeDone = 1;
+        final QueryGraphUtils.Vertex lastVertex = Util.last(vertexes);
+        final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
+        if (z < 0) {
+          break;
+        }
+        factors = new int[] {z, lastVertex.id};
+      } else {
+        // TODO: make this an externally provided function to choose the next
+        // edge.
+        zmq.episodeDone = 0;
+        factors = chooseNextEdge(unusedEdges, vertexes, multiJoin);
+      }
 
+      double cost = qGraphUtils.updateGraph(vertexes, factors, usedEdges, unusedEdges, mq,
+          rexBuilder);
+      if (!onlyFinalReward) {
+        zmq.lastReward = -cost;
+      } else {
+        // reward will be 0.00 until the very end when we throw everything at
+        // them.
+        zmq.lastTrueReward = -cost;
+        costSoFar += cost;
+        if (unusedEdges.size() == 0) {
+          zmq.lastReward = -costSoFar;
+        } else {
+          zmq.lastReward = 0.00;
+        }
+      }
+      zmq.waitForClientTill("getReward");
+      qGraphUtils.updateRelNodes(Util.last(vertexes), optRelNodes, rexBuilder, relBuilder, multiJoin);
+    }
+
+    /// just adding a projection on top of the left nodes we had.
+    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(optRelNodes);
+    relBuilder.push(top.left)
+        .project(relBuilder.fields(top.right));
+    RelNode optNode = relBuilder.build();
+    call.transformTo(optNode);
+  }
+
+  private void trace(List<QueryGraphUtils.Vertex> vertexes,
+      List<LoptMultiJoin2.Edge> unusedEdges, List<LoptMultiJoin2.Edge> usedEdges,
+      int edgeOrdinal, PrintWriter pw)
+  {
+    pw.println("bestEdge: " + edgeOrdinal);
+    pw.println("vertexes:");
+    for (QueryGraphUtils.Vertex vertex : vertexes) {
+      pw.println(vertex);
+    }
+    pw.println("unused edges:");
+    for (LoptMultiJoin2.Edge edge : unusedEdges) {
+      pw.println(edge);
+    }
+    pw.println("edges:");
+    for (LoptMultiJoin2.Edge edge : usedEdges) {
+      pw.println(edge);
+    }
+    pw.println();
+    pw.flush();
+  }
+
+
+  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures(LoptMultiJoin2.Edge edge, List<QueryGraphUtils.Vertex> vertexes, LoptMultiJoin2 mj)
+  {
+    boolean onlyJoinConditionAttributes = false;
+    ArrayList<Integer> left = null;
+    ArrayList<Integer> right = null;
+
+    Pair<ArrayList<Integer>, ArrayList<Integer>> pair;
+    List<Integer> factors = edge.factors.toList();
+
+    // intersect this with the features present in the complete query.
+    ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
+
+    for (Integer factor : factors) {
+      QueryGraphUtils.Vertex v = vertexes.get(factor);
+      ImmutableBitSet.Builder fBuilder = ImmutableBitSet.builder();
+      ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
+      // all the join conditions for this edge.
+      allPossibleFeaturesBuilder.addAll(edge.columns);
+      assert v != null;
+      assert v.visibleFeatures != null;
+      ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
+      ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleFeatures);
+      // now we have only the features visible in join condition.
+      //System.out.println("should only have one visible: " + conditionFeatures);
+      fBuilder.addAll(conditionFeatures);
+      fBuilder.addAll(v.visibleFeatures);
+      ImmutableBitSet features = fBuilder.build();
+      //System.out.println("all possible features: " + features);
+      features = features.intersect(queryFeatures);
+      //System.out.println("exact features: " + features);
+      features = mapToQueryFeatures(features, mj);
+      //System.out.println("mapped features: " + features);
+      // both start of as null. Assume first guy is the left one.
+      if (left == null) {
+        left = new ArrayList<Integer>(features.toList());
+      } else {
+        right = new ArrayList<Integer>(features.toList());
+      }
+    }
+    return new Pair<ArrayList<Integer>, ArrayList<Integer>>(left, right);
+  }
+
+  private ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs, LoptMultiJoin2 mj)
+  {
+    ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
+    for (Integer i : bs) {
+      featuresBuilder.set(mj.mapToDatabase.get(i));
+    }
+    return featuresBuilder.build();
+  }
+
+  /*
+   * Passes control to the python agent to choose the next edge.
+   * @ret: factors associated with the chosen edge
+   */
+  private int [] chooseNextEdge(List<LoptMultiJoin2.Edge> unusedEdges,
+      List<QueryGraphUtils.Vertex> vertexes, LoptMultiJoin2 multiJoin)
+  {
+    final int[] factors;
+    ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
+    // each edge is equivalent to a possible action, and must be represented
+    // by its features
+    final int edgeOrdinal;
+    ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
+    for (LoptMultiJoin2.Edge edge : unusedEdges) {
+      Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures(edge, vertexes, multiJoin);
+      actionFeatures.add(features);
+    }
+    zmq.actions = actionFeatures;
+    zmq.waitForClientTill("step");
+    if (zmq.reset) {
+      // Technically, we should allow this situation -- reset being called
+      // in the middle of an episode, but for now, we complain here because
+      // this should not be happening in training.
+      edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
+      System.err.println("actions should be chosen by python agent and not randomly!");
+      System.exit(-1);
+    } else {
+      edgeOrdinal = zmq.nextAction;
+    }
+    final LoptMultiJoin2.Edge bestEdge = unusedEdges.get(edgeOrdinal);
+
+    // For now, assume that the edge is between precisely two factors.
+    // 1-factor conditions have probably been pushed down,
+    // and 3-or-more-factor conditions are advanced. (TODO:)
+    // Therefore, for now, the factors that are merged are exactly the
+    // factors on this edge.
+    assert bestEdge.factors.cardinality() == 2;
+    factors = bestEdge.factors.toArray();
+    return factors;
+  }
+
+  private void collapseEdges()
+  {
     // FIXME: finish attempt to collapse common edges.
     //final List<RexNode> conditions = new ArrayList<>();
     //final Iterator<LoptMultiJoin2.Edge> edgeIterator1 = unusedEdges.iterator();
@@ -180,448 +345,6 @@ public class RLJoinOrderRule extends RelOptRule {
       //}
     //}
     //System.out.println("size of unusedEdges: " + unusedEdges.size());
-    // only used for finalReward scenario
-    Double costSoFar = 0.00;
-    for (;;) {
-      // each edge is equivalent to a possible action, and must be represented
-      // by its features
-
-      final int edgeOrdinal;
-      if (unusedEdges.size() >= 1) {
-        // FIXME: set this up somewhere else.
-        boolean onlyJoinConditionAttributes = false;
-        if (onlyJoinConditionAttributes) {
-          ArrayList<ArrayList<Integer>> actionFeatures = new ArrayList<ArrayList<Integer>>();
-          for (LoptMultiJoin2.Edge edge : unusedEdges) {
-            ImmutableBitSet features = getDQFeatures(edge, vertexes, multiJoin);
-            actionFeatures.add(new ArrayList<Integer>(features.toList()));
-          }
-          zmq.actions = actionFeatures;
-        } else {
-          ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
-          for (LoptMultiJoin2.Edge edge : unusedEdges) {
-            Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures2(edge, vertexes, multiJoin);
-            actionFeatures.add(features);
-          }
-          zmq.actions = actionFeatures;
-        }
-        zmq.waitForClientTill("step");
-        if (!zmq.reset) {
-          edgeOrdinal = zmq.nextAction;
-        } else {
-          System.out.println("next action was chosen randomly");
-          // Test out a random strategy.
-          edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
-        }
-      } else {
-        // technically, looks like it should work even if we don't set this
-        // here.
-        //System.out.println("setting edgeOrdinal to -1");
-        zmq.episodeDone = 1;
-        edgeOrdinal = -1;
-      }
-
-      // ask for the edge we should choose from the python agent
-      if (pw != null) {
-        trace(vertexes, unusedEdges, usedEdges, edgeOrdinal, pw);
-      }
-      final int[] factors;
-      if (edgeOrdinal == -1) {
-        // PN: check, when does this happen?
-        // No more edges. Are there any un-joined vertexes?
-        final Vertex lastVertex = Util.last(vertexes);
-        final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
-        if (z < 0) {
-          //System.out.println("going to break out of the loop");
-          break;
-        }
-        factors = new int[] {z, lastVertex.id};
-      } else {
-        final LoptMultiJoin2.Edge bestEdge = unusedEdges.get(edgeOrdinal);
-
-        // For now, assume that the edge is between precisely two factors.
-        // 1-factor conditions have probably been pushed down,
-        // and 3-or-more-factor conditions are advanced. (TODO:)
-        // Therefore, for now, the factors that are merged are exactly the
-        // factors on this edge.
-        assert bestEdge.factors.cardinality() == 2;
-        factors = bestEdge.factors.toArray();
-      }
-
-      // Determine which factor is to be on the LHS of the join.
-      final int majorFactor;
-      final int minorFactor;
-      if (vertexes.get(factors[0]).cost <= vertexes.get(factors[1]).cost) {
-        majorFactor = factors[0];
-        minorFactor = factors[1];
-      } else {
-        majorFactor = factors[1];
-        minorFactor = factors[0];
-      }
-
-      final Vertex majorVertex = vertexes.get(majorFactor);
-      final Vertex minorVertex = vertexes.get(minorFactor);
-      // set v ensures that the new vertex we are creating will be added to the
-      // factors of the new vertex.
-      final int v = vertexes.size();
-      final ImmutableBitSet newFactors =
-          majorVertex.factors
-              .rebuild()
-              .addAll(minorVertex.factors)
-              .set(v)
-              .build();
-
-      final ImmutableBitSet newFeatures =
-          majorVertex.visibleFeatures
-              .rebuild()
-              .addAll(minorVertex.visibleFeatures)
-              .build();
-
-      // Find the join conditions. All conditions whose factors are now all in
-      // the join can now be used.
-      final List<RexNode> conditions = new ArrayList<>();
-      final Iterator<LoptMultiJoin2.Edge> edgeIterator = unusedEdges.iterator();
-      while (edgeIterator.hasNext()) {
-        LoptMultiJoin2.Edge edge = edgeIterator.next();
-        if (newFactors.contains(edge.factors)) {
-          conditions.add(edge.condition);
-          edgeIterator.remove();
-          usedEdges.add(edge);
-        }
-      }
-
-      /// TODO: experiment with using other cost formulas here.
-      double cost =
-          majorVertex.cost
-          * minorVertex.cost
-          * RelMdUtil.guessSelectivity(
-              RexUtil.composeConjunction(rexBuilder, conditions, false));
-      if (isNonLinearCostModel) {
-        cost = mq.getNonLinearCount(cost);
-      }
-
-      final Vertex newVertex =
-          new JoinVertex(v, majorFactor, minorFactor, newFactors,
-              cost, ImmutableList.copyOf(conditions), newFeatures);
-      vertexes.add(newVertex);
-      if (onlyFinalReward) {
-        // reward will be 0.00 until the very end when we throw everything at
-        // them.
-        // FIXME: is this condition enough?
-        zmq.lastTrueReward = -cost;
-        costSoFar += cost;
-        if (unusedEdges.size() == 0) {
-          zmq.lastReward = -costSoFar;
-        } else {
-          zmq.lastReward = 0.00;
-        }
-      } else {
-        // treat this as the reward signal.
-        zmq.lastReward = -cost;
-        //System.out.println("set last reward as: " + zmq.lastReward);
-      }
-
-      // Re-compute selectivity of edges above the one just chosen.
-      // Suppose that we just chose the edge between "product" (10k rows) and
-      // "product_class" (10 rows).
-      // Both of those vertices are now replaced by a new vertex "P-PC".
-      // This vertex has fewer rows (1k rows) -- a fact that is critical to
-      // decisions made later. (Hence "greedy" algorithm not "simple".)
-      // The adjacent edges are modified.
-      final ImmutableBitSet merged =
-          ImmutableBitSet.of(minorFactor, majorFactor);
-      for (int i = 0; i < unusedEdges.size(); i++) {
-        final LoptMultiJoin2.Edge edge = unusedEdges.get(i);
-        if (edge.factors.intersects(merged)) {
-          ImmutableBitSet newEdgeFactors =
-              edge.factors
-                  .rebuild()
-                  .removeAll(newFactors)
-                  .set(v)
-                  .build();
-          assert newEdgeFactors.cardinality() == 2;
-          final LoptMultiJoin2.Edge newEdge =
-              new LoptMultiJoin2.Edge(edge.condition, newEdgeFactors,
-                  edge.columns);
-          unusedEdges.set(i, newEdge);
-        }
-      }
-      // is this the reight place to return results of the previous action?
-      // FIXME: not sure if we need to do anything else in this scenario?
-      if (unusedEdges.size() == 0) {
-        zmq.episodeDone = 1;
-      } else zmq.episodeDone = 0;
-      //System.out.println("going to wait till getReward");
-      zmq.waitForClientTill("getReward");
-    }
-
-    /// we could have also started constructing the partial RelNode's while the
-    /// optimization above was going on --> would let us use
-    /// node.computeSelfCost. But probably can get that functionality some other
-    /// way too.
-
-    // We have a winner!
-    List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
-    for (Vertex vertex : vertexes) {
-      if (vertex instanceof LeafVertex) {
-        LeafVertex leafVertex = (LeafVertex) vertex;
-        final Mappings.TargetMapping mapping =
-            Mappings.offsetSource(
-                Mappings.createIdentity(
-                    leafVertex.rel.getRowType().getFieldCount()),
-                leafVertex.fieldOffset,
-                multiJoin.getNumTotalFields());
-        relNodes.add(Pair.of(leafVertex.rel, mapping));
-      } else {
-        JoinVertex joinVertex = (JoinVertex) vertex;
-        final Pair<RelNode, Mappings.TargetMapping> leftPair =
-            relNodes.get(joinVertex.leftFactor);
-        RelNode left = leftPair.left;
-        final Mappings.TargetMapping leftMapping = leftPair.right;
-        final Pair<RelNode, Mappings.TargetMapping> rightPair =
-            relNodes.get(joinVertex.rightFactor);
-        RelNode right = rightPair.left;
-        final Mappings.TargetMapping rightMapping = rightPair.right;
-        final Mappings.TargetMapping mapping =
-            Mappings.merge(leftMapping,
-                Mappings.offsetTarget(rightMapping,
-                    left.getRowType().getFieldCount()));
-        if (pw != null) {
-          pw.println("left: " + leftMapping);
-          pw.println("right: " + rightMapping);
-          pw.println("combined: " + mapping);
-          pw.println();
-        }
-        // TODO: what is the use of this shuttle + mappings here?
-        // TODO: examine condition before / after the modifications to see
-        // whats up. Seems to be making sure that the ids are mapped to the
-        // correct ones.
-        final RexVisitor<RexNode> shuttle =
-            new RexPermuteInputsShuttle(mapping, left, right);
-        final RexNode condition =
-            RexUtil.composeConjunction(rexBuilder, joinVertex.conditions,
-                false);
-        final RelNode join = relBuilder.push(left)
-            .push(right)
-            .join(JoinRelType.INNER, condition.accept(shuttle))
-            .build();
-        //System.out.println("before rowCount:");
-        //System.out.println("rowCount2: " + join.computeSelfCost(planner, mq));
-        //System.out.println("rowCount3: " + mq.getNonCumulativeCost(join));
-        //System.out.println("nonlinear rowCount3: " + mq.getNonCumulativeCost(join, true));
-        relNodes.add(Pair.of(join, mapping));
-      }
-      if (pw != null) {
-        pw.println(Util.last(relNodes));
-      }
-    }
-
-    /// just adding a projection on top of the left nodes we had.
-    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(relNodes);
-    relBuilder.push(top.left)
-        .project(relBuilder.fields(top.right));
-    RelNode optNode = relBuilder.build();
-    call.transformTo(optNode);
-  }
-
-  private void trace(List<Vertex> vertexes,
-      List<LoptMultiJoin2.Edge> unusedEdges, List<LoptMultiJoin2.Edge> usedEdges,
-      int edgeOrdinal, PrintWriter pw) {
-    pw.println("bestEdge: " + edgeOrdinal);
-    pw.println("vertexes:");
-    for (Vertex vertex : vertexes) {
-      pw.println(vertex);
-    }
-    pw.println("unused edges:");
-    for (LoptMultiJoin2.Edge edge : unusedEdges) {
-      pw.println(edge);
-    }
-    pw.println("edges:");
-    for (LoptMultiJoin2.Edge edge : usedEdges) {
-      pw.println(edge);
-    }
-    pw.println();
-    pw.flush();
-  }
-
-  int chooseBestEdge(List<LoptMultiJoin2.Edge> edges,
-      Comparator<LoptMultiJoin2.Edge> comparator) {
-    return minPos(edges, comparator);
-  }
-
-  /** Returns the index within a list at which compares least according to a
-   * comparator.
-   *
-   * <p>In the case of a tie, returns the earliest such element.</p>
-   *
-   * <p>If the list is empty, returns -1.</p>
-   */
-  static <E> int minPos(List<E> list, Comparator<E> fn) {
-    if (list.isEmpty()) {
-      return -1;
-    }
-    E eBest = list.get(0);
-    int iBest = 0;
-    for (int i = 1; i < list.size(); i++) {
-      E e = list.get(i);
-      if (fn.compare(e, eBest) < 0) {
-        eBest = e;
-        iBest = i;
-      }
-    }
-    return iBest;
-  }
-
-  /** Participant in a join (relation or join). */
-  abstract static class Vertex {
-    final int id;
-
-    protected final ImmutableBitSet factors;
-    final double cost;
-    // one hot features based on the DQ paper
-    public ImmutableBitSet visibleFeatures;
-
-    Vertex(int id, ImmutableBitSet factors, double cost) {
-      this.id = id;
-      this.factors = factors;
-      this.cost = cost;
-    }
-  }
-
-  /** Relation participating in a join. */
-  static class LeafVertex extends Vertex {
-    private final RelNode rel;
-    final int fieldOffset;
-
-    LeafVertex(int id, RelNode rel, double cost, int fieldOffset) {
-      super(id, ImmutableBitSet.of(id), cost);
-      this.rel = rel;
-      this.fieldOffset = fieldOffset;
-      //initialize visibleFeatures with all the bits in the range turned on
-			ImmutableBitSet.Builder visibleFeaturesBuilder = ImmutableBitSet.builder();
-      int fieldCount = rel.getRowType().getFieldCount();
-			for (int i = fieldOffset; i < fieldOffset+fieldCount; i++) {
-        // TODO: decide if we should set this or not depending on the topmost
-        // projection
-				visibleFeaturesBuilder.set(i);
-			}
-			visibleFeatures = visibleFeaturesBuilder.build();
-    }
-
-    @Override public String toString() {
-      return "LeafVertex(id: " + id
-          + ", cost: " + Util.human(cost)
-          + ", factors: " + factors
-          + ", fieldOffset: " + fieldOffset
-          + ", visibleFeatures: " + visibleFeatures
-          + ")";
-    }
-  }
-
-  /** Participant in a join which is itself a join. */
-  static class JoinVertex extends Vertex {
-    private final int leftFactor;
-    private final int rightFactor;
-    /** Zero or more join conditions. All are in terms of the original input
-     * columns (not in terms of the outputs of left and right input factors). */
-    final ImmutableList<RexNode> conditions;
-
-    JoinVertex(int id, int leftFactor, int rightFactor, ImmutableBitSet factors,
-        double cost, ImmutableList<RexNode> conditions, ImmutableBitSet visibleFeatures) {
-      super(id, factors, cost);
-      this.leftFactor = leftFactor;
-      this.rightFactor = rightFactor;
-      this.conditions = Objects.requireNonNull(conditions);
-      this.visibleFeatures = visibleFeatures;
-    }
-
-    @Override public String toString() {
-      return "JoinVertex(id: " + id
-          + ", cost: " + Util.human(cost)
-          + ", factors: " + factors
-          + ", leftFactor: " + leftFactor
-          + ", rightFactor: " + rightFactor
-          + ", visibleFeatures: " + visibleFeatures
-          + ")";
-    }
-  }
-
-  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures2(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
-      boolean onlyJoinConditionAttributes = false;
-      ArrayList<Integer> left = null;
-      ArrayList<Integer> right = null;
-
-      Pair<ArrayList<Integer>, ArrayList<Integer>> pair;
-      List<Integer> factors = edge.factors.toList();
-
-      // intersect this with the features present in the complete query.
-      ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
-
-      for (Integer factor : factors) {
-        Vertex v = vertexes.get(factor);
-        ImmutableBitSet.Builder fBuilder = ImmutableBitSet.builder();
-        ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
-        // all the join conditions for this edge.
-        allPossibleFeaturesBuilder.addAll(edge.columns);
-        assert v != null;
-        assert v.visibleFeatures != null;
-        ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
-        ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleFeatures);
-        // now we have only the features visible in join condition.
-        //System.out.println("should only have one visible: " + conditionFeatures);
-        fBuilder.addAll(conditionFeatures);
-        fBuilder.addAll(v.visibleFeatures);
-        ImmutableBitSet features = fBuilder.build();
-        //System.out.println("all possible features: " + features);
-        features = features.intersect(queryFeatures);
-        //System.out.println("exact features: " + features);
-        features = mapToQueryFeatures(features, mj);
-        //System.out.println("mapped features: " + features);
-        // both start of as null. Assume first guy is the left one.
-        if (left == null) {
-          left = new ArrayList<Integer>(features.toList());
-        } else {
-          right = new ArrayList<Integer>(features.toList());
-        }
-      }
-      return new Pair<ArrayList<Integer>, ArrayList<Integer>>(left, right);
-  }
-
-  private ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs, LoptMultiJoin2 mj)
-  {
-      ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
-      for (Integer i : bs) {
-        featuresBuilder.set(mj.mapToDatabase.get(i));
-      }
-      return featuresBuilder.build();
-  }
-
-  // features based on the DQ paper corresponding to a single edge.
-  private ImmutableBitSet getDQFeatures(LoptMultiJoin2.Edge edge, List<Vertex> vertexes, LoptMultiJoin2 mj) {
-      boolean onlyJoinConditionAttributes = false;
-      ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
-      allPossibleFeaturesBuilder.addAll(edge.columns);
-      List<Integer> factors = edge.factors.toList();
-      for (Integer factor : factors) {
-        Vertex v = vertexes.get(factor);
-        assert v != null;
-        assert v.visibleFeatures != null;
-        // FIXME: commenting this so we have only join condition features on
-        // each edge.
-        // allPossibleFeaturesBuilder.addAll(v.visibleFeatures);
-      }
-      ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
-      // intersect this with the features present in the complete query.
-      ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
-      queryFeatures = allPossibleFeatures.intersect(queryFeatures);
-      //System.out.println("queryFeatures = " + queryFeatures);
-      // now we want to embed these into the features representing all the
-      // attributes of this workload.
-      ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
-      for (Integer i : queryFeatures) {
-        featuresBuilder.set(mj.mapToDatabase.get(i));
-      }
-      return featuresBuilder.build();
   }
 }
 
