@@ -56,13 +56,18 @@ public class QueryOptExperiment {
         // we add JoinCommutRule + JoinPushThroughJoinRule +
         // JoinAssociateRule, then we should get exhaustive search.
         // This makes sense.
+        // public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
+            //ImmutableList.of(JoinCommuteRule.INSTANCE,
+                    //JoinAssociateRule.INSTANCE,
+                    //JoinPushThroughJoinRule.RIGHT,
+                    //JoinPushThroughJoinRule.LEFT,
+                    //FilterJoinRule.FILTER_ON_JOIN,
+										//ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
-            ImmutableList.of(JoinCommuteRule.INSTANCE,
-                    JoinAssociateRule.INSTANCE,
-                    JoinPushThroughJoinRule.RIGHT,
-                    JoinPushThroughJoinRule.LEFT,
-                    FilterJoinRule.FILTER_ON_JOIN,
-						        ProjectMergeRule.INSTANCE);
+            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE,
+                             FilterJoinRule.FILTER_ON_JOIN,
+                             ProjectMergeRule.INSTANCE);
+
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
             //ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
@@ -171,19 +176,7 @@ public class QueryOptExperiment {
         // Initialize all the volcanoPlanners we should need
         for (PLANNER_TYPE t  : plannerTypes) {
             Frameworks.ConfigBuilder bld = getDefaultFrameworkBuilder();
-            if (t == PLANNER_TYPE.EXHAUSTIVE || t == PLANNER_TYPE.ORIG_JOIN_ORDER) {
-                // TODO: probably can use the same function as other cases too
-                // and skip multijoin in genJoinRule.
-                Program program = Programs.ofRules(t.getRules());
-                List<Program> rules = new ArrayList<Program>();
-                rules.add(program);
-                bld.programs(rules);
-            } else {
-                // probably same statement can work with all types.
-                //bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 3));
-                // FIXME temporary:
-                bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
-            }
+            bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
             Planner planner = Frameworks.getPlanner(bld.build());
             volcanoPlanners.add(planner);
         }
@@ -359,6 +352,7 @@ public class QueryOptExperiment {
     {
         Planner planner = volcanoPlanners.get(plannerNum);
         String plannerName = plannerTypes.get(plannerNum).name();
+        System.out.println("planner name: " + plannerName);
         // doing this at the start because there are many possible exit
         // points because of various failures.
         planner.close();
@@ -394,7 +388,7 @@ public class QueryOptExperiment {
         MyMetadataQuery mq = MyMetadataQuery.instance();
         RelOptCost unoptCost = getCost(mq, node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-        //System.out.println("unoptimized cost is: " + unoptCost);
+        System.out.println("unoptimized cost is: " + unoptCost);
         //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
@@ -408,9 +402,9 @@ public class QueryOptExperiment {
                     node);
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
-						//System.out.println("optimized cost for " + plannerName + " is: " + optCost);
-            //System.out.println("planning time: " + (System.currentTimeMillis()-
-                  //start));
+            System.out.println("optimized cost for " + plannerName + " is: " + optCost);
+            System.out.println("planning time: " + (System.currentTimeMillis()-
+                  start));
             ZeroMQServer zmq = getZMQServer();
             zmq.optimizedPlans.put(plannerName, optPlan);
             zmq.optimizedCosts.put(plannerName, optCost.getRows());

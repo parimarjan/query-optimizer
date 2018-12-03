@@ -89,6 +89,8 @@ def read_flags():
                                 default=0, help="")
     parser.add_argument("-lopt", type=int, required=False,
                                 default=1, help="use the LOpt planner")
+    parser.add_argument("-exh", type=int, required=False,
+                                default=1, help="use the exhaustive search planner")
     parser.add_argument("-adjust_learning_rate", type=int, required=False,
                                 default=0, help="adjust pytorch learning rate while training")
     parser.add_argument("-reward_damping", type=int, required=False,
@@ -133,7 +135,7 @@ def start_java_server(args):
     global JAVA_PROCESS
     JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
     -Dexec.args="-query {query} -port {port} -mode {mode} -onlyFinalReward \
-    {final_reward} -lopt {lopt} -python 1"'
+    {final_reward} -lopt {lopt} -exhaustive {exh} -python 1"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
     mode = ""
@@ -143,7 +145,8 @@ def start_java_server(args):
         mode = "test"
 
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
-            mode=mode, final_reward=args.only_final_reward, lopt=args.lopt)
+            mode=mode, final_reward=args.only_final_reward, lopt=args.lopt,
+            exh=args.exh)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")
