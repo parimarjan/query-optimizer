@@ -335,16 +335,7 @@ public class QueryOptExperiment {
     }
 
     private RelOptCost getCost(RelMetadataQuery mq, RelNode node) {
-
       return ((MyMetadataQuery) mq).getCumulativeCost(node, isNonLinearCostModel);
-      //RelOptCost cost = null;
-      //if (isNonLinearCostModel) {
-         //cost = ((MyMetadataQuery) mq).getCumulativeCost2(node);
-         ////cost = mq.getCumulativeCost2(node);
-      //} else {
-         //cost = mq.getCumulativeCost(node);
-      //}
-      //return cost;
     }
 
     private boolean planAndExecuteQuery(String query, int plannerNum)
@@ -352,7 +343,29 @@ public class QueryOptExperiment {
     {
         Planner planner = volcanoPlanners.get(plannerNum);
         String plannerName = plannerTypes.get(plannerNum).name();
-        System.out.println("planner name: " + plannerName);
+        // first, have we already run this planner + query combination before?
+        // In that case, we have no need to execute it again, as the result
+        // will be stored in the zmq object.
+        // FIXME: better storage system here.
+        // FIXME: add a separate storage layer?
+        HashMap<String, Double> planCostMap = zmq.optimizedCosts.get(query);
+        if (planCostMap == null) {
+          // this query has not been seen so far.
+          zmq.optimizedCosts.put(query, new HashMap<String, Double>());
+          zmq.optimizedPlans.put(query, new HashMap<String, String>());
+        } else {
+          // for RL, we always continue executing.
+          if (!plannerName.equals("RL")) {
+            // let's check if this planner has been seen for this query.
+            Double cost = planCostMap.get(plannerName);
+            if (cost != null) {
+              // have already run this, so don't have to do it again.
+              return true;
+            }
+          }
+        }
+
+        //System.out.println("planner name: " + plannerName);
         // doing this at the start because there are many possible exit
         // points because of various failures.
         planner.close();
@@ -383,8 +396,6 @@ public class QueryOptExperiment {
         // testing if features were set correctly
         ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
 
-        //RelMetadataQuery mq = RelMetadataQuery.instance();
-        //RelMetadataQuery mq = MyMetadataQuery.instance();
         MyMetadataQuery mq = MyMetadataQuery.instance();
         RelOptCost unoptCost = getCost(mq, node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
@@ -406,14 +417,13 @@ public class QueryOptExperiment {
             System.out.println("planning time: " + (System.currentTimeMillis()-
                   start));
             ZeroMQServer zmq = getZMQServer();
-            zmq.optimizedPlans.put(plannerName, optPlan);
-            zmq.optimizedCosts.put(plannerName, optCost.getRows());
-            //if (!plannerName.equals("RL")) {
-              //zmq.optimizedCosts.put(plannerName, optCost.getRows());
-            //} else {
-              ////System.out.println("optimized cost after transform for RL: " + optCost.getRows());
-              ////System.out.println("optimized plan after transform for RL: " + optPlan);
-            //}
+            HashMap<String, Double> updCosts = zmq.optimizedCosts.get(query);
+            updCosts.put(plannerName, optCost.getRows());
+            zmq.optimizedCosts.put(query, updCosts);
+            // update plans
+            HashMap<String, String> updPlans = zmq.optimizedPlans.get(query);
+            updPlans.put(plannerName, optPlan);
+            zmq.optimizedPlans.put(query, updPlans);
 
             if (executeOnDB) {
               String results = executeNode(optimizedNode);
@@ -422,9 +432,6 @@ public class QueryOptExperiment {
         } catch (Exception e) {
             // it is useful to throw the error here to see what went wrong..
             throw e;
-            //System.out.println(e);
-            //System.out.println(e.getStackTrace());
-            //return false;
         }
         return true;
     }

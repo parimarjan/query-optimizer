@@ -103,6 +103,9 @@ class QueryOptEnv():
         self.socket.send(msg)
         # FIXME: using poller might make this better in general.
         ret = None
+        # while (True):
+            # ret = self.socket.recv(zmq.NOBLOCK)
+            # time.sleep(0.1)
         ret = self.socket.recv()
 	return ret
 

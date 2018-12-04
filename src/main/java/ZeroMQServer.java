@@ -31,8 +31,10 @@ public class ZeroMQServer {
   public Serializable state;
   public Serializable actions;
 
-  public HashMap<String, String> optimizedPlans = new HashMap<String, String>();
-  public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
+  public HashMap<String, HashMap<String, String>> optimizedPlans = new HashMap<String, HashMap<String, String>>();
+  public HashMap<String, HashMap<String, Double>> optimizedCosts = new HashMap<String, HashMap<String, Double>>();
+  //public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
+
   public ArrayList<Integer> curQuerySet;
 
   public ZeroMQServer(int port) {
@@ -40,15 +42,6 @@ public class ZeroMQServer {
     context = ZMQ.context(1);
     responder = context.socket(ZMQ.PAIR);
     responder.bind("tcp://*:" + this.port);
-  }
-
-  public void restart() throws Exception {
-      //context = ZMQ.context(ZMQ.REP);
-      //responder = context.socket(ZMQ.REP);
-
-      //context = ZMQ.context(ZMQ.PAIR);
-      //responder = context.socket(ZMQ.PAIR);
-      //responder.bind("tcp://*:" + this.port);
   }
 
   public void close() {
@@ -77,7 +70,7 @@ public class ZeroMQServer {
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
-        Double totalCost = optimizedCosts.get(plannerName);
+        Double totalCost = optimizedCosts.get(query).get(plannerName);
         if (totalCost == null) break;
         // join costs don't consider scan cost.
 
@@ -91,7 +84,7 @@ public class ZeroMQServer {
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
-        resp = optimizedPlans.get(plannerName);
+        resp = optimizedPlans.get(query).get(plannerName);
         if (resp == null) resp = "";
         break;
       case "getAttrCount":

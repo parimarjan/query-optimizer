@@ -91,45 +91,6 @@ def Qtargets(r_mb, new_state_action_mb, done_mb, Q_, gamma=1.0):
     target = r_mb + gamma*maxQ
     return target
 
-# FIXME: should gamma be just 1.00?
-def Qtargets_old(r_mb, new_state_mb, new_actions_mb, done_mb, Q_, gamma=1.0):
-    '''
-    '''
-    # find the max reward we can get for each of the new states using Q_, and
-    # the given actions.
-    maxQ = []
-    for i, state in enumerate(new_state_mb):
-        # array of actions
-        actions = new_actions_mb[i]
-        done = done_mb[i]
-        phi_batch = []
-        if done:
-            # FIXME: new array creations should go through a common point, like
-            # to_variable.
-            maxQ.append(torch.cuda.FloatTensor([[0]]))
-            # maxQ.append(torch.FloatTensor([[0]]))
-        else:
-            for _, action_features in enumerate(actions):
-                # since these are python lists, + is just concatenation
-                phi = state + action_features
-                assert len(phi) == len(state) + len(action_features), "phi len test"
-                phi_batch.append(phi)
-            phi_batch = to_variable(np.array(phi_batch)).float()
-            all_vals = Q_(phi_batch)
-            best_reward, _ = all_vals.data.max(0)
-            maxQ.append(best_reward)
-
-    assert len(maxQ) == len(r_mb)
-    maxQ = to_variable(torch.cat(maxQ))
-    # now we can find the target qvals using standard reward +
-    # q(new_state)*discount_factor formula.
-    # Note: we don't care about 'done' because we already take care of
-    # situations where episode was done based on the length of the actions
-    # array.
-    r_mb = to_variable(r_mb).float()
-    target = r_mb + gamma*maxQ
-    return target
-
 def gradient_descent(y, q, optimizer):
     # Clear previous gradients before backward pass
     optimizer.zero_grad()

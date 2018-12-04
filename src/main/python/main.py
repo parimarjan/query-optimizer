@@ -90,7 +90,7 @@ def read_flags():
     parser.add_argument("-lopt", type=int, required=False,
                                 default=1, help="use the LOpt planner")
     parser.add_argument("-exh", type=int, required=False,
-                                default=1, help="use the exhaustive search planner")
+                                default=0, help="use the exhaustive search planner")
     parser.add_argument("-adjust_learning_rate", type=int, required=False,
                                 default=0, help="adjust pytorch learning rate while training")
     parser.add_argument("-reward_damping", type=int, required=False,
@@ -193,7 +193,6 @@ def train_reward_func(args, env):
     )
 
     for ep in range(args.num_episodes):
-
         # FIXME: should we be doing this in general or not?
         if args.adjust_learning_rate:
             adjust_learning_rate(args, optimizer, ep)
@@ -302,6 +301,8 @@ def train(args, env):
         print("number of saved models: ", len(model_names))
 
     for ep in range(args.num_episodes):
+        if (ep % 100 == 0):
+            print("episode: ", ep)
         if args.adjust_learning_rate:
             adjust_learning_rate(args, optimizer, ep)
 
@@ -433,6 +434,10 @@ def train(args, env):
             if args.lopt:
                 lopt_plan = env.get_optimized_plans("LOpt")
                 lopt_cost = env.get_optimized_costs("LOpt")
+            if args.exh:
+                exh_plan = env.get_optimized_plans("EXHAUSTIVE")
+                exh_cost = env.get_optimized_costs("EXHAUSTIVE")
+
             rl_cost = env.get_optimized_costs("RL")
 
             if args.lopt:
@@ -443,6 +448,13 @@ def train(args, env):
                 else:
                     viz_ep_costs.update(ep, lopt_cost,
                             name="LOpt")
+            if args.exh:
+                if args.query < 0:
+                    viz_ep_costs.update(ep, math.log(exh_cost),
+                        name="Exhaustive")
+                else:
+                    viz_ep_costs.update(ep, exh_cost,
+                            name="Exhaustive")
 
             if args.query < 0:
                 viz_ep_costs.update(ep, math.log(rl_cost),
@@ -484,12 +496,12 @@ def test(args, env):
             state = env._get_state()
             actions = env.action_space()
             # FIXME: have a separate greedy function.
-            action_index, qvalue, epsilon = egreedy_action(Q, state, actions,
+            action_index, all_qvals, epsilon = egreedy_action(Q, state, actions,
                     1000, decay_steps=args.decay_steps, greedy=True)
             new_state, reward, done = env.step(action_index)
 
             ep_rewards.append(reward)
-            ep_max_qvals.append(qvalue)
+            ep_max_qvals.append(all_qvals.max())
 
         total_remaining_rewards = []
         for i in range(len(ep_max_qvals)):
