@@ -44,7 +44,6 @@ import org.apache.calcite.sql.parser.*;
 
 public class QueryGraphUtils {
 
-  boolean isNonLinearCostModel;
   PrintWriter pw;
   public QueryGraphUtils(PrintWriter pw)
   {
@@ -179,9 +178,6 @@ public class QueryGraphUtils {
         * minorVertex.cost
         * RelMdUtil.guessSelectivity(
             RexUtil.composeConjunction(rexBuilder, conditions, false));
-    if (isNonLinearCostModel) {
-      cost = mq.getNonLinearCount(cost);
-    }
 
     final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
         newFactors, cost, ImmutableList.copyOf(conditions), newFeatures);

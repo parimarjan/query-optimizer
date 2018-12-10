@@ -57,33 +57,19 @@ import org.apache.calcite.sql.parser.*;
 
 /**
  * TODO: describe bushy rule which served as the base template etc.
- * Planner rule that finds an approximately optimal ordering for join operators
- * using a heuristic algorithm.
  *
  * <p>It is triggered by the pattern
  * {@link org.apache.calcite.rel.logical.LogicalProject} ({@link MultiJoin}).
  *
  * <p>It is similar to
  * {@link org.apache.calcite.rel.rules.LoptOptimizeJoinRule}.
- * {@code LoptOptimizeJoinRule} is only capable of producing left-deep joins;
- * this rule is capable of producing bushy joins.
- *
- * <p>TODO:
- * <ol>
- *   <li>Join conditions that touch 1 factor.
- *   <li>Join conditions that touch 3 factors.
- *   <li>More than 1 join conditions that touch the same pair of factors,
- *       e.g. {@code t0.c1 = t1.c1 and t1.c2 = t0.c3}
- * </ol>
+ * {@code LoptOptimizeJoinRule}
  */
 public class RLJoinOrderRule extends RelOptRule {
   public static final RLJoinOrderRule INSTANCE =
       new RLJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
-  // TODO: just set this to what we want.
-  //private final PrintWriter pw = Util.printWriter(System.out);
   private final PrintWriter pw = null;
-  private boolean isNonLinearCostModel;
   private boolean onlyFinalReward;
 
   /** Creates an RLJoinOrderRule. */
@@ -129,7 +115,6 @@ public class RLJoinOrderRule extends RelOptRule {
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
-    isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
     onlyFinalReward = QueryOptExperiment.onlyFinalReward();
 		// wrapper around RelMetadataQuery, to add support for non linear cost
     // models.
@@ -149,9 +134,6 @@ public class RLJoinOrderRule extends RelOptRule {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       double cost = mq.getRowCount(rel);
-      if (isNonLinearCostModel) {
-        cost = mq.getNonLinearCount(cost);
-      }
       scanCost += cost;
       QueryGraphUtils.Vertex newVertex = new QueryGraphUtils.LeafVertex(i, rel, cost, x);
       vertexes.add(newVertex);
@@ -204,7 +186,6 @@ public class RLJoinOrderRule extends RelOptRule {
       //RelNode curOptNode = tmpRelBuilder.build();
       RelNode curOptNode = curTop.left;
       double cost = mq.getNonCumulativeCost(curOptNode).getRows();
-      //double cost = estCost;
 
       if (!onlyFinalReward) {
         costSoFar += cost;

@@ -47,8 +47,6 @@ public class ZeroMQServer {
     this.verbose = verbose;
     HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
     if (oldCosts != null) {
-      System.out.println("old costs weren't null!");
-      System.out.println(oldCosts);
       optimizedCosts = oldCosts;
     }
   }
@@ -56,10 +54,8 @@ public class ZeroMQServer {
   public void saveUpdatedCosts() {
     HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
     HashMap<String, HashMap<String, Double>> newCosts = new HashMap<String, HashMap<String, Double>>();
-    //System.out.println(oldCosts);
     if (oldCosts != null){
       // ignore this guy, file probably didn't exist.
-      System.out.println("oldCosts were not null");
       newCosts.putAll(oldCosts);
     }
     newCosts.putAll(optimizedCosts);

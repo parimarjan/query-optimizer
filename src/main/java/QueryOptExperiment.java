@@ -147,7 +147,7 @@ public class QueryOptExperiment {
     private HashMap<String, HashMap<String, String>> resultVerifier;
 
     private boolean executeOnDB;
-    private static boolean isNonLinearCostModel;
+    private static String costModelName;
     private static boolean onlyFinalReward;
     private static boolean verbose;
 
@@ -166,7 +166,7 @@ public class QueryOptExperiment {
     public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose) throws SQLException {
         // FIXME: make this as a variable arg.
         this.executeOnDB = false;
-        this.isNonLinearCostModel = false;
+        this.costModelName = "CM2";
         this.onlyFinalReward = onlyFinalReward;
         this.verbose = verbose;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
@@ -327,8 +327,8 @@ public class QueryOptExperiment {
       }
     }
 
-    public static boolean isNonLinearCostModel() {
-      return isNonLinearCostModel;
+    public static String getCostModelName() {
+      return costModelName;
     }
 
     public static boolean onlyFinalReward() {
@@ -340,7 +340,7 @@ public class QueryOptExperiment {
     }
 
     private RelOptCost getCost(RelMetadataQuery mq, RelNode node) {
-      return ((MyMetadataQuery) mq).getCumulativeCost(node, isNonLinearCostModel);
+      return ((MyMetadataQuery) mq).getCumulativeCost(node);
     }
 
     private boolean planAndExecuteQuery(String query, int plannerNum)
@@ -357,9 +357,8 @@ public class QueryOptExperiment {
         if (planCostMap == null) {
           // this query has not been seen so far.
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
-          //zmq.optimizedPlans.put(query, new HashMap<String, String>());
-        } else {
-          // for RL, we always continue executing.
+        } else if (!executeOnDB) {
+          // for RL, or if we need to executeOnDb, we always continue executing.
           if (!plannerName.equals("RL")) {
             // let's check if this planner has been seen for this query.
             Double cost = planCostMap.get(plannerName);
@@ -427,16 +426,15 @@ public class QueryOptExperiment {
             zmq.optimizedCosts.put(query, updCosts);
             // debug
             if (!plannerName.equals("RL")) {
-              System.out.println("non RL planner, going to try and save it!");
-              System.out.println(zmq.optimizedCosts);
               zmq.saveUpdatedCosts();
             }
-            // update plans
+            // FIXME: update plans: do this the same way costs are updated.
             //HashMap<String, String> updPlans = zmq.optimizedPlans.get(query);
             //updPlans.put(plannerName, optPlan);
             //zmq.optimizedPlans.put(query, updPlans);
 
             if (executeOnDB) {
+              System.out.println("going to execute " + plannerName);
               String results = executeNode(optimizedNode);
               resultVerifier.get(query).put(plannerName, results);
             }
@@ -475,10 +473,7 @@ public class QueryOptExperiment {
         traitDefs.add(RelCollationTraitDef.INSTANCE);
         configBuilder.traitDefs(traitDefs);
         configBuilder.context(Contexts.EMPTY_CONTEXT);
-				// FIXME: testing
-        if (isNonLinearCostModel) {
-          configBuilder.costFactory(TestCost.FACTORY);
-        }
+        configBuilder.costFactory(MyCost.FACTORY);
         return configBuilder;
     }
 

@@ -5,16 +5,16 @@ import org.apache.calcite.plan.RelOptUtil;
 import java.util.Objects;
 
 /**
- * <code>TestCost</code> represents the cost of a plan node.
+ * <code>MyCost</code> represents the cost of a plan node.
  *
  * <p>This class is immutable: none of the methods modify any member
  * variables.</p>
  */
-class TestCost implements RelOptCost {
+class MyCost implements RelOptCost {
   //~ Static fields/initializers ---------------------------------------------
 
-  static final TestCost INFINITY =
-      new TestCost(
+  static final MyCost INFINITY =
+      new MyCost(
           Double.POSITIVE_INFINITY,
           Double.POSITIVE_INFINITY,
           Double.POSITIVE_INFINITY) {
@@ -23,22 +23,22 @@ class TestCost implements RelOptCost {
         }
       };
 
-  static final TestCost HUGE =
-      new TestCost(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE) {
+  static final MyCost HUGE =
+      new MyCost(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE) {
         public String toString() {
           return "{huge}";
         }
       };
 
-  static final TestCost ZERO =
-      new TestCost(0.0, 0.0, 0.0) {
+  static final MyCost ZERO =
+      new MyCost(0.0, 0.0, 0.0) {
         public String toString() {
           return "{0}";
         }
       };
 
-  static final TestCost TINY =
-      new TestCost(1.0, 1.0, 0.0) {
+  static final MyCost TINY =
+      new MyCost(1.0, 1.0, 0.0) {
         public String toString() {
           return "{tiny}";
         }
@@ -54,8 +54,7 @@ class TestCost implements RelOptCost {
 
   //~ Constructors -----------------------------------------------------------
 
-  TestCost(double rowCount, double cpu, double io) {
-    //System.out.println("TestCost constructor");
+  MyCost(double rowCount, double cpu, double io) {
     this.rowCount = rowCount;
     this.cpu = cpu;
     this.io = io;
@@ -80,7 +79,7 @@ class TestCost implements RelOptCost {
 
   public boolean isLe(RelOptCost other) {
 		// FIXME:
-		TestCost that = (TestCost) other;
+		MyCost that = (MyCost) other;
 		if (true) {
 			return this == that
 					//|| this.rowCount <= that.rowCount;
@@ -94,7 +93,7 @@ class TestCost implements RelOptCost {
 
   public boolean isLt(RelOptCost other) {
     if (true) {
-      TestCost that = (TestCost) other;
+      MyCost that = (MyCost) other;
       //return this.rowCount < that.rowCount;
       return this.getRealRowCount() < that.getRealRowCount();
     }
@@ -111,14 +110,8 @@ class TestCost implements RelOptCost {
   }
 
   public double getRows() {
-    //System.out.println("rowCount: " + rowCount);
-    //System.out.println("2*rowCount: " + rowCount*2.0);
     return rowCount;
   }
-
-  //public void setRows(double rowCount) {
-    //this.rowCount = rowCount;
-  //}
 
   @Override public int hashCode() {
     return Objects.hash(rowCount, cpu, io);
@@ -126,17 +119,17 @@ class TestCost implements RelOptCost {
 
   public boolean equals(RelOptCost other) {
     return this == other
-        || other instanceof TestCost
-        && (this.rowCount == ((TestCost) other).rowCount)
-        && (this.cpu == ((TestCost) other).cpu)
-        && (this.io == ((TestCost) other).io);
+        || other instanceof MyCost
+        && (this.rowCount == ((MyCost) other).rowCount)
+        && (this.cpu == ((MyCost) other).cpu)
+        && (this.io == ((MyCost) other).io);
   }
 
   public boolean isEqWithEpsilon(RelOptCost other) {
-    if (!(other instanceof TestCost)) {
+    if (!(other instanceof MyCost)) {
       return false;
     }
-    TestCost that = (TestCost) other;
+    MyCost that = (MyCost) other;
     return (this == that)
         || ((Math.abs(this.getRealRowCount() - that.getRealRowCount()) < RelOptUtil.EPSILON)
         && (Math.abs(this.cpu - that.cpu) < RelOptUtil.EPSILON)
@@ -147,8 +140,8 @@ class TestCost implements RelOptCost {
     if (this == INFINITY) {
       return this;
     }
-    TestCost that = (TestCost) other;
-    return new TestCost(
+    MyCost that = (MyCost) other;
+    return new MyCost(
         this.rowCount - that.rowCount,
         this.cpu - that.cpu,
         this.io - that.io);
@@ -158,13 +151,13 @@ class TestCost implements RelOptCost {
     if (this == INFINITY) {
       return this;
     }
-    return new TestCost(rowCount * factor, cpu * factor, io * factor);
+    return new MyCost(rowCount * factor, cpu * factor, io * factor);
   }
 
   public double divideBy(RelOptCost cost) {
     // Compute the geometric average of the ratios of all of the factors
     // which are non-zero and finite.
-    TestCost that = (TestCost) cost;
+    MyCost that = (MyCost) cost;
     double d = 1;
     double n = 0;
     if ((this.rowCount != 0)
@@ -195,11 +188,11 @@ class TestCost implements RelOptCost {
   }
 
   public RelOptCost plus(RelOptCost other) {
-    TestCost that = (TestCost) other;
+    MyCost that = (MyCost) other;
     if ((this == INFINITY) || (that == INFINITY)) {
       return INFINITY;
     }
-    return new TestCost(
+    return new MyCost(
         this.rowCount + that.rowCount,
         this.cpu + that.cpu,
         this.io + that.io);
@@ -210,26 +203,26 @@ class TestCost implements RelOptCost {
   }
 
   /** Implementation of {@link org.apache.calcite.plan.RelOptCostFactory}
-   * that creates {@link org.apache.calcite.plan.volcano.TestCost}s. */
+   * that creates {@link org.apache.calcite.plan.volcano.MyCost}s. */
   private static class Factory implements RelOptCostFactory {
     public RelOptCost makeCost(double dRows, double dCpu, double dIo) {
-      return new TestCost(dRows, dCpu, dIo);
+      return new MyCost(dRows, dCpu, dIo);
     }
 
     public RelOptCost makeHugeCost() {
-      return TestCost.HUGE;
+      return MyCost.HUGE;
     }
 
     public RelOptCost makeInfiniteCost() {
-      return TestCost.INFINITY;
+      return MyCost.INFINITY;
     }
 
     public RelOptCost makeTinyCost() {
-      return TestCost.TINY;
+      return MyCost.TINY;
     }
 
     public RelOptCost makeZeroCost() {
-      return TestCost.ZERO;
+      return MyCost.ZERO;
     }
   }
 }

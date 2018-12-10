@@ -69,7 +69,6 @@ import java.util.TreeSet;
 /// how do we say what this should be triggered by?
 ///// so what exactly does this change to get the ordering across?
 public class MyLoptOptimizeJoinRule extends RelOptRule {
-  private boolean isNonLinearCostModel;
   public static final MyLoptOptimizeJoinRule INSTANCE =
       new MyLoptOptimizeJoinRule(RelFactories.LOGICAL_BUILDER);
 
@@ -89,7 +88,6 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
   //~ Methods ----------------------------------------------------------------
 
   public void onMatch(RelOptRuleCall call) {
-    isNonLinearCostModel = QueryOptExperiment.isNonLinearCostModel();
     final MultiJoin multiJoinRel = call.rel(0);
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     //final RelMetadataQuery mq = call.getMetadataQuery();
@@ -961,10 +959,10 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     RelOptCost costPushDown = null;
     RelOptCost costTop = null;
     if (pushDownTree != null) {
-      costPushDown = ((MyMetadataQuery) mq).getCumulativeCost(pushDownTree.getJoinTree(), isNonLinearCostModel);
+      costPushDown = ((MyMetadataQuery) mq).getCumulativeCost(pushDownTree.getJoinTree());
     }
     if (topTree != null) {
-      costTop = ((MyMetadataQuery) mq).getCumulativeCost(topTree.getJoinTree(), isNonLinearCostModel);
+      costTop = ((MyMetadataQuery) mq).getCumulativeCost(topTree.getJoinTree());
     }
 
     if (pushDownTree == null) {
@@ -1901,10 +1899,6 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
 
     Double leftRowCount = mq.getRowCount(left.getJoinTree());
     Double rightRowCount = mq.getRowCount(right.getJoinTree());
-    if (isNonLinearCostModel) {
-      leftRowCount  = ((MyMetadataQuery) mq).getNonLinearCount(leftRowCount);
-      rightRowCount = ((MyMetadataQuery) mq).getNonLinearCount(rightRowCount);
-    }
 
     // The left side is smaller than the right if it has fewer rows,
     // or if it has the same number of rows as the right (excluding
