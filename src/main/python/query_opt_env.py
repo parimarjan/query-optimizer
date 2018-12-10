@@ -5,7 +5,7 @@ import ast
 import random
 import numpy as np
 
-COMMON_MIN_MAX = True
+COMMON_MIN_MAX = False
 
 class QueryOptEnv():
     """
@@ -82,8 +82,9 @@ class QueryOptEnv():
 
     def get_optimized_costs(self, name):
         self.send(b"getJoinsCost")
-        resp = self.send(name)
-        return float(resp)
+        resp = float(self.send(name))
+        assert resp != 0, "sanity check"
+        return resp
 
     def get_num_input_features(self):
         if self.only_join_condition_attributes:
@@ -215,9 +216,6 @@ class QueryOptEnv():
 
             # FIXME: dumb hack
             self.reset()
-
-        # return self._get_state()
-
 
     def action_space(self):
         """

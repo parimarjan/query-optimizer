@@ -11,6 +11,7 @@ import java.util.*;
 
 public class ZeroMQServer {
 
+  boolean verbose;
   // ZMQ stuff for communication
   private ZMQ.Context context;
   private ZMQ.Socket responder;
@@ -34,58 +35,112 @@ public class ZeroMQServer {
   public HashMap<String, HashMap<String, String>> optimizedPlans = new HashMap<String, HashMap<String, String>>();
   public HashMap<String, HashMap<String, Double>> optimizedCosts = new HashMap<String, HashMap<String, Double>>();
   //public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
+  private String COSTS_FILE_NAME = "optCosts.ser";
 
   public ArrayList<Integer> curQuerySet;
 
-  public ZeroMQServer(int port) {
+  public ZeroMQServer(int port, boolean verbose) {
     this.port = Integer.toString(port);
     context = ZMQ.context(1);
     responder = context.socket(ZMQ.PAIR);
     responder.bind("tcp://*:" + this.port);
+    this.verbose = verbose;
+    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
+    if (oldCosts != null) {
+      System.out.println("old costs weren't null!");
+      System.out.println(oldCosts);
+      optimizedCosts = oldCosts;
+    }
   }
 
-  public void close() {
-      //responder.close();
-      //context.term();
+  public void saveUpdatedCosts() {
+    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
+    HashMap<String, HashMap<String, Double>> newCosts = new HashMap<String, HashMap<String, Double>>();
+    //System.out.println(oldCosts);
+    if (oldCosts != null){
+      // ignore this guy, file probably didn't exist.
+      System.out.println("oldCosts were not null");
+      newCosts.putAll(oldCosts);
+    }
+    newCosts.putAll(optimizedCosts);
+    saveCosts(newCosts);
+  }
+
+  // FIXME: make these general purpose
+  public void saveCosts(Serializable obj)
+  {
+		try {
+			ObjectOutputStream oos = new ObjectOutputStream(
+							new FileOutputStream(COSTS_FILE_NAME)
+			);
+			oos.writeObject(obj);
+			oos.flush();
+			oos.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}
+  }
+
+  public Serializable loadCosts() {
+    try {
+      FileInputStream fis = new FileInputStream(COSTS_FILE_NAME);
+      ObjectInputStream ois = new ObjectInputStream(fis);
+      HashMap<String, HashMap<String, Double>> costs = (HashMap) ois.readObject();
+      ois.close();
+      return costs;
+    } catch (Exception e) {
+      System.out.println(e);
+    }
+    return null;
   }
 
   // returns the command string sent by the client.
   public String waitForCommand() throws Exception {
     // FIXME: is it bad to reset the connection every time?
     // restart();
-    //System.out.println("java server waiting for a command");
     String msg;
     byte[] request = responder.recv(0);
     msg = new String(request);
-    //System.out.println("Received " + msg);
+    if (verbose) System.out.println("Received " + msg);
     Serializable resp = null;
     // this will be set to true ONLY after reset has been called.
     reset = false;
-    //System.out.println("waitForCommand: " + msg);
     String plannerName;
     switch (msg)
     {
       case "getJoinsCost":
-        resp = "";
+        if (verbose) System.out.println("getJoinsCost");
+        //resp = "";
+        resp = 0.00;
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
         Double totalCost = optimizedCosts.get(query).get(plannerName);
-        if (totalCost == null) break;
-        // join costs don't consider scan cost.
+        if (totalCost == null) {
+          // FIXME: this should never happen, but need to figure out a way to
+          // debug this (?)
+          System.out.println("totalCost was null!");
+          //System.exit(-1);
+          break;
+        }
+        if (verbose) System.out.println("totalCost was not null!");
 
-        resp = (Serializable) (totalCost - scanCost);
+        // FIXME: join costs don't consider scan cost (?)
+        resp = (Serializable) (totalCost);
+        //resp = (Serializable) (totalCost - scanCost);
         break;
       case "getCurQuerySet":
         resp = curQuerySet;
         break;
       case "getOptPlan":
+        if (verbose) System.out.println("getOptPlan");
         resp = "";
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
-        resp = optimizedPlans.get(query).get(plannerName);
-        if (resp == null) resp = "";
+        if (verbose) System.out.println("plannerName = " + plannerName);
+        //resp = optimizedPlans.get(query).get(plannerName);
+        //if (resp == null) resp = "";
         break;
       case "getAttrCount":
         resp = DbInfo.attrCount;
@@ -127,30 +182,22 @@ public class ZeroMQServer {
         return msg;
     }
 
-    //System.out.println(resp);
+    if (verbose) System.out.println("resp is: " + resp);
 		try {
-      // FIXME: can also write out bytes like this, but it was a pain to deserialize
-      // in python.
-			//out = new ObjectOutputStream(bos);
-			//out.writeObject(resp);
-			//out.flush();
-			//byte[] yourBytes = bos.toByteArray();
-      //System.out.println("sending bytes");
-      //responder.send(yourBytes);
       responder.send(resp.toString());
 		} catch (Exception ex) {
 				// ignore close exception
         System.out.println("there was an error while sending stuff!!");
         // at the least call close here.
-        System.exit(-1);
+        // FIXME: exiting from java in general seems to fail silently..
+        //System.exit(-1);
     }
-
-    //close();
     return msg;
   }
 
   public void waitForClientTill(String breakMsg)
   {
+    if (verbose) System.out.println("wait for client till: " + breakMsg);
     try {
       while (!reset) {
         String cmd = waitForCommand();

@@ -208,8 +208,9 @@ public class QueryGraphUtils {
     return cost;
   }
 
-  public void updateRelNodes(Vertex vertex, List<Pair<RelNode, TargetMapping>> relNodes,
-      RexBuilder rexBuilder, RelBuilder relBuilder, LoptMultiJoin multiJoin)
+  public void updateRelNodes(Vertex vertex, List<Pair<RelNode, TargetMapping>>
+      relNodes, RexBuilder rexBuilder, RelBuilder relBuilder, LoptMultiJoin
+      multiJoin)
   {
     if (vertex instanceof LeafVertex) {
       LeafVertex leafVertex = (LeafVertex) vertex;

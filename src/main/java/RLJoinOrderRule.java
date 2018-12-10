@@ -119,6 +119,10 @@ public class RLJoinOrderRule extends RelOptRule {
   @Override
   public void onMatch(RelOptRuleCall call)
   {
+    // setting original expression's importance to 0
+    RelNode orig = call.getRelList().get(0);
+    call.getPlanner().setImportance(orig, 0.0);
+
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // this is required if we want to use node.computeSelfCost()
     // final RelOptPlanner planner = call.getPlanner();
@@ -167,6 +171,7 @@ public class RLJoinOrderRule extends RelOptRule {
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     // only used for finalReward scenario
     Double costSoFar = 0.00;
+    Double estCostSoFar = 0.00;
     for (;;) {
       // break condition
       final int[] factors;
@@ -186,9 +191,23 @@ public class RLJoinOrderRule extends RelOptRule {
         factors = chooseNextEdge(unusedEdges, vertexes, multiJoin);
       }
 
-      double cost = qGraphUtils.updateGraph(vertexes, factors, usedEdges, unusedEdges, mq,
-          rexBuilder);
+      double estCost = qGraphUtils.updateGraph(vertexes, factors, usedEdges,
+          unusedEdges, mq, rexBuilder);
+      estCostSoFar += estCost;
+      qGraphUtils.updateRelNodes(Util.last(vertexes), optRelNodes, rexBuilder, relBuilder, multiJoin);
+      // FIXME: do we need a new relBuilder here?
+      //RelBuilder tmpRelBuilder = call.builder();
+      //RelBuilder tmpRelBuilder = relBuilder;
+      Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(optRelNodes);
+      //tmpRelBuilder.push(curTop.left)
+          //.project(tmpRelBuilder.fields(curTop.right));
+      //RelNode curOptNode = tmpRelBuilder.build();
+      RelNode curOptNode = curTop.left;
+      double cost = mq.getNonCumulativeCost(curOptNode).getRows();
+      //double cost = estCost;
+
       if (!onlyFinalReward) {
+        costSoFar += cost;
         zmq.lastReward = -cost;
       } else {
         // reward will be 0.00 until the very end when we throw everything at
@@ -202,14 +221,18 @@ public class RLJoinOrderRule extends RelOptRule {
         }
       }
       zmq.waitForClientTill("getReward");
-      qGraphUtils.updateRelNodes(Util.last(vertexes), optRelNodes, rexBuilder, relBuilder, multiJoin);
     }
 
+    //System.out.println("costSoFar: " + costSoFar);
+    //System.out.println("estCostSoFar: " + estCostSoFar);
+
+    /// FIXME: need to understand what this TargetMapping business really is...
     /// just adding a projection on top of the left nodes we had.
     final Pair<RelNode, Mappings.TargetMapping> top = Util.last(optRelNodes);
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
+    //System.out.println("RL optNode cost: " + mq.getCumulativeCost(optNode));
     call.transformTo(optNode);
   }
 
@@ -310,11 +333,11 @@ public class RLJoinOrderRule extends RelOptRule {
       // in the middle of an episode, but for now, we complain here because
       // this should not be happening in training.
       edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
-      System.err.println("actions should be chosen by python agent and not randomly!");
-      System.exit(-1);
+      System.out.println("actions should be chosen by python agent and not randomly!");
     } else {
       edgeOrdinal = zmq.nextAction;
     }
+    //System.out.println("edgeOrdinal chosen: " + edgeOrdinal);
     final LoptMultiJoin2.Edge bestEdge = unusedEdges.get(edgeOrdinal);
 
     // For now, assume that the edge is between precisely two factors.

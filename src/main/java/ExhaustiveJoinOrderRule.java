@@ -71,7 +71,8 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   // just some large positive number to initialize, costs always positive, and
   // lower is better.
   private double bestCost = 1000000000.00;
-  private List<QueryGraphUtils.Vertex> bestVertexes = null;
+  //private List<QueryGraphUtils.Vertex> bestVertexes = null;
+  private RelNode bestOptNode = null;
 
   /** Creates an ExhaustiveJoinOrderRule. */
   public ExhaustiveJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -88,8 +89,12 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   public void onMatch(RelOptRuleCall call)
   {
     bestCost = 1000000000.00;
-    bestVertexes = null;
-    //System.out.println("exhaustive join rule!");
+    bestOptNode = null;
+    // Setting original expressions importance to 0, so our choice will be
+    // chosen.
+    RelNode orig = call.getRelList().get(0);
+    call.getPlanner().setImportance(orig, 0.0);
+
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     multiJoin = new LoptMultiJoin2(multiJoinRel);
@@ -99,54 +104,80 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
 
     // Add the orignal tables as vertexes
     int x = 0;
+    double totalVCost = 0.00;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       double cost = mq.getRowCount(rel);
+      totalVCost += cost;
       QueryGraphUtils.Vertex newVertex = new QueryGraphUtils.LeafVertex(i, rel, cost, x);
       vertexes.add(newVertex);
       x += rel.getRowType().getFieldCount();
     }
+    System.out.println("cost of orig vertices: " + totalVCost);
     assert x == multiJoin.getNumTotalFields();
 
     final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
     for (RexNode node : multiJoin.getJoinFilters()) {
-      unusedEdges.add(multiJoin.createEdge2(node));
+      LoptMultiJoin2.Edge edge = multiJoin.createEdge2(node);
+      boolean newEdge = true;
+      //System.out.println("edge.factors: " + edge.factors);
+      for (LoptMultiJoin2.Edge edge2 : unusedEdges) {
+        //System.out.println("edge2.factors: " + edge2.factors);
+        if (edge2.factors.contains(edge.factors)) {
+          System.out.println("!!going to merge an edge!!");
+          newEdge = false;
+          // combine these edges
+          edge2.mergeEdge(edge, rexBuilder);
+          break;
+        }
+      }
+      if (newEdge) unusedEdges.add(edge);
     }
+    System.out.println("final length of unusedEdges: " + unusedEdges.size());
+
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     numAdded = 0;
     recursiveAddNodes(call, vertexes, usedEdges, unusedEdges, rexBuilder, 0.00);
-    assert bestVertexes != null;
+    assert bestOptNode != null;
+    //assert bestVertexes != null;
     // build a final optimized node using the bestVertexes
-    RelBuilder relBuilder = call.builder();
-
-    // celebrate and add the relNode being developed so far from optRelNodes
-    // to the set of equivalent nodes.
-    List<Pair<RelNode, TargetMapping>> optRelNodes = new ArrayList<>();
-    for (QueryGraphUtils.Vertex v : bestVertexes) {
-      qGraphUtils.updateRelNodes(v, optRelNodes, rexBuilder, relBuilder, multiJoin);
-    }
-    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(optRelNodes);
-    relBuilder.push(top.left)
-        .project(relBuilder.fields(top.right));
-    RelNode optNode = relBuilder.build();
-    call.transformTo(optNode);
+    System.out.println("bestCost: " + bestCost);
+    System.out.println("exhaustive search optNode cost " + mq.getCumulativeCost(bestOptNode));
+    call.transformTo(bestOptNode);
   }
 
   private void recursiveAddNodes(RelOptRuleCall call, List<QueryGraphUtils.Vertex> vertexes, List<LoptMultiJoin2.Edge> usedEdges, List<LoptMultiJoin2.Edge> unusedEdges, RexBuilder rexBuilder, double costSoFar)
   {
+    //System.out.println("size of unusedEdges: " + unusedEdges.size());
+    //System.out.println("costSoFar: " + costSoFar);
     //System.out.println("recursive call, size = " + unusedEdges.size());
     /* Break condition */
     if (unusedEdges.size() == 0) {
       // have reached the end of recursion, and costSoFar is also better than
       // bestCost seen so far. So this must be the best node so far.
-      bestVertexes = vertexes;
-      bestCost = costSoFar;
-      //System.out.println("new best cost: " + costSoFar);
-      //System.out.println("adding another equivalent node");
-      numAdded += 1;
-      if (numAdded % 100 == 0) {
-        System.out.println("numAdded exhaustive search nodes: " + numAdded);
+      //bestCost = costSoFar;
+      RelBuilder relBuilder = call.builder();
+
+      // celebrate and add the relNode being developed so far from optRelNodes
+      // to the set of equivalent nodes.
+      List<Pair<RelNode, TargetMapping>> optRelNodes = new ArrayList<>();
+      for (QueryGraphUtils.Vertex v : vertexes) {
+        qGraphUtils.updateRelNodes(v, optRelNodes, rexBuilder, relBuilder, multiJoin);
+      }
+      final Pair<RelNode, Mappings.TargetMapping> top = Util.last(optRelNodes);
+      relBuilder.push(top.left)
+          .project(relBuilder.fields(top.right));
+      RelNode optNode = relBuilder.build();
+      double trueCost = mq.getCumulativeCost(optNode).getRows();
+      if (trueCost < bestCost) {
+        // update it ONLY now.
+        numAdded += 1;
+        bestCost = trueCost;
+        bestOptNode = optNode;
+        if (numAdded % 5 == 0) {
+          System.out.println("numAdded exhaustive search nodes: " + numAdded);
+        }
       }
       return;
     }
@@ -165,9 +196,20 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       // choice
       curCost += qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
           curUnusedEdges, mq, rexBuilder);
+      //qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
+          //curUnusedEdges, mq, rexBuilder);
+      // FIXME: very inefficient to rebuild the optNode etc. here.
+      //List<Pair<RelNode, TargetMapping>> curRelNodes = new ArrayList<>();
+      //RelBuilder rBuilder = call.builder();
+      //for (QueryGraphUtils.Vertex v : curVertexes) {
+        //qGraphUtils.updateRelNodes(v, curRelNodes, rexBuilder, rBuilder, multiJoin);
+      //}
+      //Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(curRelNodes);
+      //RelNode curOptNode = curTop.left;
+      //curCost += mq.getNonCumulativeCost(curOptNode).getRows();
 
       if (curCost >= bestCost) {
-        //System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);
+        System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);
         continue;
       }
       recursiveAddNodes(call, curVertexes, curUsedEdges, curUnusedEdges, rexBuilder, curCost);

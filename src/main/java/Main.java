@@ -22,6 +22,7 @@ class Main {
     options.addOption(newOption("lopt", "Use the LoptOptimizeJoinRule planner or not. boolean: 0 or 1"));
     options.addOption(newOption("python", "Use the planner to support the python controlled open-ai style environment or not. boolean: 0 or 1"));
     options.addOption(newOption("exhaustive", "use exhaustive search planner or not"));
+    options.addOption(newOption("verbose", "use exhaustive search planner or not"));
 
     CommandLineParser parser = new DefaultParser();
     HelpFormatter formatter = new HelpFormatter();
@@ -56,6 +57,9 @@ class Main {
             queries.add(i);
           }
         }
+    } else if (nextQuery == -3) {
+      queries.add(0);
+      queries.add(1);
     } else {
       queries.add(nextQuery);
     }
@@ -70,6 +74,7 @@ class Main {
     boolean lopt = (Integer.parseInt(cmd.getOptionValue("lopt", "1")) == 1);
     boolean python = (Integer.parseInt(cmd.getOptionValue("python", "1")) == 1);
     boolean exhaustive = (Integer.parseInt(cmd.getOptionValue("exhaustive", "0")) == 1);
+    boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
 
     // FIXME: helper utility to just print out all the options?
     System.out.println("using zmq port " + port);
@@ -98,7 +103,7 @@ class Main {
 
     QueryOptExperiment exp = null;
     try {
-        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward);
+        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward, verbose);
     } catch (Exception e) {
         System.err.println("Sql Exception!");
         throw e;

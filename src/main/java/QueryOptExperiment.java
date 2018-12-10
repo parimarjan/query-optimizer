@@ -64,16 +64,16 @@ public class QueryOptExperiment {
                     //FilterJoinRule.FILTER_ON_JOIN,
 										//ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
-            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE,
-                             FilterJoinRule.FILTER_ON_JOIN,
-                             ProjectMergeRule.INSTANCE);
+            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE);
+                             //FilterJoinRule.FILTER_ON_JOIN,
+                             //ProjectMergeRule.INSTANCE);
 
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
             //ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
-            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE,
-                            FilterJoinRule.FILTER_ON_JOIN,
-                            ProjectMergeRule.INSTANCE);
+            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE);
+                            //FilterJoinRule.FILTER_ON_JOIN,
+                            //ProjectMergeRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> RANDOM_RULES =
             ImmutableList.of(JoinOrderTest.INSTANCE);
@@ -88,9 +88,10 @@ public class QueryOptExperiment {
 				// node from the joins was projecting all the fields before projecting it down to
 				// only the selected fields
 				public static final ImmutableList<RelOptRule> RL_RULES = ImmutableList.of(
-            RLJoinOrderRule.INSTANCE,
-            FilterJoinRule.FILTER_ON_JOIN,
-            ProjectMergeRule.INSTANCE);
+            RLJoinOrderRule.INSTANCE);
+            //RLJoinOrderRule.INSTANCE,
+            //FilterJoinRule.FILTER_ON_JOIN,
+            //ProjectMergeRule.INSTANCE);
 
         // FIXME: not sure if we need to add other rules - like we
         // could add all of the Programs.RULE_SET here, and remove the
@@ -148,6 +149,7 @@ public class QueryOptExperiment {
     private boolean executeOnDB;
     private static boolean isNonLinearCostModel;
     private static boolean onlyFinalReward;
+    private static boolean verbose;
 
     /*
     *************************************************************************
@@ -161,14 +163,15 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward) throws SQLException {
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose) throws SQLException {
         // FIXME: make this as a variable arg.
         this.executeOnDB = false;
         this.isNonLinearCostModel = false;
         this.onlyFinalReward = onlyFinalReward;
+        this.verbose = verbose;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
-        this.zmq = new ZeroMQServer(port);
+        this.zmq = new ZeroMQServer(port, verbose);
 
         this.plannerTypes = plannerTypes;
         volcanoPlanners = new ArrayList<Planner>();
@@ -236,10 +239,10 @@ public class QueryOptExperiment {
       zmq.waitForClientTill("getAttrCount");
       for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
         // basically wait for reset every time.
-        String query = allSqlQueries.get(queries.get(nextQuery));
-        zmq.query = query;
         zmq.waitForClientTill("reset");
         zmq.reset = false;
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        zmq.query = query;
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {
@@ -258,11 +261,11 @@ public class QueryOptExperiment {
 
       for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
         // basically wait for reset every time.
-        String query = allSqlQueries.get(queries.get(nextQuery));
-        zmq.query = query;
         zmq.waitForClientTill("reset");
         zmq.reset = false;
-        //System.out.println("next query: " + nextQuery);
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        zmq.query = query;
+        System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
           if (!success) {
@@ -299,11 +302,13 @@ public class QueryOptExperiment {
 
         // pick a random query for this episode
         //System.out.println("queries size is: " + queries.size());
-        int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
-        String query = allSqlQueries.get(queries.get(nextQuery));
-        zmq.query = query;
+        // FIXME: reasoning here gets somewhat convoluted. Simplify it. Right now, very important to do this BEFORE selecting the next query, or else we might give stale info to python client causing deadlock.
         zmq.waitForClientTill("reset");
         zmq.reset = false;
+        int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        if (verbose) System.out.println("nextQuery is: " + nextQuery);
+        String query = allSqlQueries.get(queries.get(nextQuery));
+        zmq.query = query;
         //System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           boolean success = planAndExecuteQuery(query, i);
@@ -352,7 +357,7 @@ public class QueryOptExperiment {
         if (planCostMap == null) {
           // this query has not been seen so far.
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
-          zmq.optimizedPlans.put(query, new HashMap<String, String>());
+          //zmq.optimizedPlans.put(query, new HashMap<String, String>());
         } else {
           // for RL, we always continue executing.
           if (!plannerName.equals("RL")) {
@@ -360,6 +365,7 @@ public class QueryOptExperiment {
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
+            System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
             }
           }
@@ -373,7 +379,6 @@ public class QueryOptExperiment {
         RelNode node = null;
         try {
             SqlNode sqlNode = planner.parse(query);
-            //System.out.println(sqlNode);
             SqlNode validatedSqlNode = planner.validate(sqlNode);
             node = planner.rel(validatedSqlNode).project();
         } catch (SqlParseException e) {
@@ -399,7 +404,7 @@ public class QueryOptExperiment {
         MyMetadataQuery mq = MyMetadataQuery.instance();
         RelOptCost unoptCost = getCost(mq, node);
         //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-        System.out.println("unoptimized cost is: " + unoptCost);
+        if (verbose) System.out.println("unoptimized cost is: " + unoptCost);
         //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
@@ -413,17 +418,23 @@ public class QueryOptExperiment {
                     node);
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
-            System.out.println("optimized cost for " + plannerName + " is: " + optCost);
-            System.out.println("planning time: " + (System.currentTimeMillis()-
-                  start));
+            if (verbose) System.out.println("optimized cost for " + plannerName + " is: " + optCost);
+            if (verbose) System.out.println("planning time: " +
+                (System.currentTimeMillis()- start));
             ZeroMQServer zmq = getZMQServer();
             HashMap<String, Double> updCosts = zmq.optimizedCosts.get(query);
             updCosts.put(plannerName, optCost.getRows());
             zmq.optimizedCosts.put(query, updCosts);
+            // debug
+            if (!plannerName.equals("RL")) {
+              System.out.println("non RL planner, going to try and save it!");
+              System.out.println(zmq.optimizedCosts);
+              zmq.saveUpdatedCosts();
+            }
             // update plans
-            HashMap<String, String> updPlans = zmq.optimizedPlans.get(query);
-            updPlans.put(plannerName, optPlan);
-            zmq.optimizedPlans.put(query, updPlans);
+            //HashMap<String, String> updPlans = zmq.optimizedPlans.get(query);
+            //updPlans.put(plannerName, optPlan);
+            //zmq.optimizedPlans.put(query, updPlans);
 
             if (executeOnDB) {
               String results = executeNode(optimizedNode);

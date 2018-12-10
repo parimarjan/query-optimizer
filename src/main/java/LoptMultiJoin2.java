@@ -38,6 +38,9 @@ import com.google.common.collect.Lists;
 
 import java.util.*;
 
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexUtil;
+
 /**
  * Utility class that keeps track of the join factors that
  * make up a {@link MultiJoin}.
@@ -92,14 +95,29 @@ public class LoptMultiJoin2 extends LoptMultiJoin {
 
 	/** Information about a join-condition. */
   static class Edge {
-    final ImmutableBitSet factors;
-    final ImmutableBitSet columns;
-    final RexNode condition;
+    public ImmutableBitSet factors;
+    public ImmutableBitSet columns;
+    RexNode condition;
 
     Edge (RexNode condition, ImmutableBitSet factors, ImmutableBitSet columns) {
       this.condition = condition;
       this.factors = factors;
       this.columns = columns;
+    }
+
+    // FIXME: verify everything works as expected.
+    public void mergeEdge(Edge newEdge, RexBuilder rexBuilder) {
+      assert newEdge.factors.contains(factors);
+      // factors should already be updated. Now, update columns.
+      ImmutableBitSet.Builder columnBuilder = ImmutableBitSet.builder();
+      columnBuilder.addAll(this.columns);
+      columnBuilder.addAll(newEdge.columns);
+      columns = columnBuilder.build();
+      // update conditions
+      List<RexNode> conditions = new ArrayList<>();
+      conditions.add(condition);
+      conditions.add(newEdge.condition);
+      condition = RexUtil.composeConjunction(rexBuilder, conditions, false);
     }
 
     @Override public String toString() {

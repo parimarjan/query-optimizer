@@ -9,6 +9,8 @@ from utils.utils import *
 from utils.learn import egreedy_action, Qvalues, Qtargets, gradient_descent
 from utils.models import ReplayMemory
 from utils.viz import ScalarVisualizer, TextVisualizer, convert_to_html
+from train_reward_func import train_reward_func
+from test import test
 
 import numpy as np
 import time
@@ -40,12 +42,6 @@ def check_actions_in_state(num_attrs, state, actions):
         if not ab.issubset(sb):
             return False
     return True
-
-def get_model_name(args):
-    if args.suffix == "":
-        return str(hash(str(args)))
-    else:
-        return args.suffix
 
 def read_flags():
     parser = argparse.ArgumentParser()
@@ -135,7 +131,7 @@ def start_java_server(args):
     global JAVA_PROCESS
     JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
     -Dexec.args="-query {query} -port {port} -mode {mode} -onlyFinalReward \
-    {final_reward} -lopt {lopt} -exhaustive {exh} -python 1"'
+    {final_reward} -lopt {lopt} -exhaustive {exh} -python 1 -verbose {verbose}"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
     mode = ""
@@ -146,7 +142,7 @@ def start_java_server(args):
 
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
             mode=mode, final_reward=args.only_final_reward, lopt=args.lopt,
-            exh=args.exh)
+            exh=args.exh, verbose=args.verbose)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")
@@ -163,85 +159,6 @@ def adjust_learning_rate(args, optimizer, epoch):
         print("new lr is: ", lr)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-
-def train_reward_func(args, env):
-    assert args.only_final_reward, "train reward func only for this scenario"
-
-    ################## Visdom Stuff ######################
-    if args.visdom:
-        env_name = "queries: " + str(env.query_set) + "-plots-" + args.suffix
-        # FIXME: just loop over all args.
-        viz_params = TextVisualizer("Parameters",env=env_name)
-        params_text = str(args)
-        viz_params.update(params_text)
-
-        viz_ep_loss = ScalarVisualizer("per episode loss", env=env_name,
-                opts={"xlabel":"episode", "ylabel":"Reward - Sum(EstimatedRewards)",
-                    "title":"Difference of Reward and Estimated Reward"})
-        viz_reward_estimates = ScalarVisualizer("reward estimates", env=env_name,
-                opts={"xlabel":"mdp step", "ylabel":"reward estimates", "markersize":30,
-                    "show_legend":True})
-
-    ################## End Visdom Stuff ######################
-
-    num_input_features = env.get_num_input_features()
-
-    R = CostModelNetwork(num_input_features)
-    # Init network optimizer
-    optimizer = optim.RMSprop(
-        R.parameters(), lr=args.lr, alpha=0.95, eps=.01  # ,momentum=0.95,
-    )
-
-    for ep in range(args.num_episodes):
-        # FIXME: should we be doing this in general or not?
-        if args.adjust_learning_rate:
-            adjust_learning_rate(args, optimizer, ep)
-
-        # don't know precise episode lengths, changes based on query
-        done = False
-        env.reset()
-        cur_ep_it = 0
-        # per episode comparison between rewards / and qvals
-        true_rewards = []
-        # ep_estimated_rewards = []
-        phi_batch = []
-        final_reward = 0
-        while not done:
-            cur_ep_it += 1
-            state = env._get_state()
-            actions = env.action_space()
-            # just take the action randomly since we are just trying to learn
-            # the cost model, and not an optimal policy
-            action_index = random.choice(range(len(actions)))
-            # action_index = 0
-            new_state, reward, done = env.step(action_index)
-            true_reward = env.get_true_reward()
-            true_rewards.append(true_reward)
-            final_reward += reward
-            assert new_state == state, "should be same in berkeley featurization"
-            # ep_rewards.append(reward)
-            phi_batch.append(state + actions[action_index])
-
-        phi_batch = to_variable(phi_batch).float()
-        est_rewards = R(phi_batch)
-        est_rewards_sum = est_rewards.sum()
-        est_loss = float((final_reward - est_rewards_sum).data.cpu().numpy()[0])
-        print("est loss: ", est_loss)
-
-        # TODO: training + minibatching
-        # episode is done!
-        learning_loss = gradient_descent(est_rewards_sum, final_reward, optimizer)
-        print("learning loss: ", learning_loss.data.cpu().numpy())
-
-        ########### updating visdom  #############
-        if args.visdom:
-            viz_ep_loss.update(ep, est_loss)
-
-            assert len(est_rewards) == len(true_rewards), 'test'
-            viz_reward_estimates.update(range(len(est_rewards)), est_rewards,
-                        update="replace", name="estimated values")
-            viz_reward_estimates.update(range(len(est_rewards)), true_rewards,
-                        update="replace", name="true reward values")
 
 def train(args, env):
 
@@ -303,6 +220,7 @@ def train(args, env):
     for ep in range(args.num_episodes):
         if (ep % 100 == 0):
             print("episode: ", ep)
+
         if args.adjust_learning_rate:
             adjust_learning_rate(args, optimizer, ep)
 
@@ -428,14 +346,13 @@ def train(args, env):
             viz_qval_stats.update(range(len(ep_all_qvals)), stats3,
                 update="replace", name="Qmax - Qmin")
 
-
             # FIXME: test robustness if LOpt not being used etc.
-            rl_plan = env.get_optimized_plans("RL")
+            # rl_plan = env.get_optimized_plans("RL")
             if args.lopt:
-                lopt_plan = env.get_optimized_plans("LOpt")
+                # lopt_plan = env.get_optimized_plans("LOpt")
                 lopt_cost = env.get_optimized_costs("LOpt")
             if args.exh:
-                exh_plan = env.get_optimized_plans("EXHAUSTIVE")
+                # exh_plan = env.get_optimized_plans("EXHAUSTIVE")
                 exh_cost = env.get_optimized_costs("EXHAUSTIVE")
 
             rl_cost = env.get_optimized_costs("RL")
@@ -465,79 +382,6 @@ def train(args, env):
 
             # viz_rl_plan.update(convert_to_html(rl_plan))
             # viz_lopt_plan.update(convert_to_html(lopt_plan))
-
-def test(args, env):
-    print("in test!")
-    num_input_features = env.get_num_input_features()
-    model_names = get_model_names(get_model_name(args), args.dir)
-    model_name = model_names[-1]
-    print("number of saved models: ", len(model_names))
-    Q = TestQNetwork(num_input_features)
-    Q.load_state_dict(torch.load(model_name))
-    model_step = model_name_to_step(model_name)
-    print("loaded Q network, model step number is: ", model_step)
-
-    if True:
-        env_name = "test queries: " + str(env.query_set)
-        viz_ep_costs = ScalarVisualizer("costs", env=env_name,
-                opts={"xlabel":"query number", "ylabel":"costs",
-                    "title": "per query costs"})
-
-    # just iterate over all samples in env
-    num_good = 0
-    num_bad = 0
-    for ep in range(args.num_episodes):
-        done = False
-        env.reset()
-        ep_rewards = []
-        ep_max_qvals = []
-        print("running ep: ", ep)
-        while not done:
-            state = env._get_state()
-            actions = env.action_space()
-            # FIXME: have a separate greedy function.
-            action_index, all_qvals, epsilon = egreedy_action(Q, state, actions,
-                    1000, decay_steps=args.decay_steps, greedy=True)
-            new_state, reward, done = env.step(action_index)
-
-            ep_rewards.append(reward)
-            ep_max_qvals.append(all_qvals.max())
-
-        total_remaining_rewards = []
-        for i in range(len(ep_max_qvals)):
-            total_remaining_reward = 0
-            for j in range(i, len(ep_rewards)):
-                total_remaining_reward += ep_rewards[j]
-            total_remaining_rewards.append(total_remaining_reward)
-
-        real_loss = np.sum(np.array(total_remaining_rewards)-np.array(ep_max_qvals))
-        rl_plan = env.get_optimized_plans("RL")
-        assert args.lopt, "testing should use it"
-
-        if args.lopt:
-            lopt_plan = env.get_optimized_plans("LOpt")
-            lopt_cost = env.get_optimized_costs("LOpt")
-            rl_cost = env.get_optimized_costs("RL")
-            if lopt_cost < rl_cost:
-                num_bad += 1
-            else:
-                num_good += 1
-        if args.lopt:
-            viz_ep_costs.update(ep, lopt_cost,
-                    name="LOpt")
-        viz_ep_costs.update(ep, rl_cost,
-                name="RL")
-
-        # viz_ep_costs.update(ep, math.log(lopt_cost),
-                # name="LOpt")
-        # viz_ep_costs.update(ep, math.log(rl_cost),
-                # name="RL")
-
-        if args.lopt:
-            print("ep {}, real loss: {}, cost_diff: {}, lopt_cost:{}, \
-                    rl_cost:{}".format(ep, real_loss, lopt_cost-rl_cost, lopt_cost,
-                        rl_cost))
-        print("num good: {}, num bad: {}".format(num_good, num_bad))
 
 def cleanup():
     # Send the signal to

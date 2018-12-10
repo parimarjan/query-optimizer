@@ -65,3 +65,9 @@ def get_model_names(name, out_dir):
     # find files in the directory that match same format:
     fnames = sorted(glob.glob(out_dir + name + "*"), key=model_name_to_step)
     return fnames
+
+def get_model_name(args):
+    if args.suffix == "":
+        return str(hash(str(args)))
+    else:
+        return args.suffix

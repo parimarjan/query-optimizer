@@ -479,6 +479,7 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     // with the best cumulative cost. Volcano planner keeps the alternative
     // join subtrees and cost the final plan to pick the best one.
     for (RelNode plan : plans) {
+      //System.out.println("lopt plan, costs: " + mq.getCumulativeCost(plan));
       call.transformTo(plan);
     }
   }
