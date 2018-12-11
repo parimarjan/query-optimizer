@@ -35,11 +35,13 @@ public class ZeroMQServer {
   public HashMap<String, HashMap<String, String>> optimizedPlans = new HashMap<String, HashMap<String, String>>();
   public HashMap<String, HashMap<String, Double>> optimizedCosts = new HashMap<String, HashMap<String, Double>>();
   //public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
-  private String COSTS_FILE_NAME = "optCosts.ser";
+  private String BASE_COSTS_FILE_NAME = "optCosts.ser";
+  private String COSTS_FILE_NAME;
 
   public ArrayList<Integer> curQuerySet;
 
   public ZeroMQServer(int port, boolean verbose) {
+    COSTS_FILE_NAME = QueryOptExperiment.getCostModelName() + BASE_COSTS_FILE_NAME;
     this.port = Integer.toString(port);
     context = ZMQ.context(1);
     responder = context.socket(ZMQ.PAIR);

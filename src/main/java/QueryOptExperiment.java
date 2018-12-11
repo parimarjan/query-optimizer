@@ -150,6 +150,7 @@ public class QueryOptExperiment {
     private static String costModelName;
     private static boolean onlyFinalReward;
     private static boolean verbose;
+    private static boolean useSavedCosts = false;
 
     /*
     *************************************************************************
@@ -357,14 +358,14 @@ public class QueryOptExperiment {
         if (planCostMap == null) {
           // this query has not been seen so far.
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
-        } else if (!executeOnDB) {
+        } else if (!executeOnDB && useSavedCosts) {
           // for RL, or if we need to executeOnDb, we always continue executing.
           if (!plannerName.equals("RL")) {
             // let's check if this planner has been seen for this query.
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
-            System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
+              //System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
             }
           }
@@ -418,11 +419,12 @@ public class QueryOptExperiment {
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
             if (verbose) System.out.println("optimized cost for " + plannerName + " is: " + optCost);
+            System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             if (verbose) System.out.println("planning time: " +
                 (System.currentTimeMillis()- start));
             ZeroMQServer zmq = getZMQServer();
             HashMap<String, Double> updCosts = zmq.optimizedCosts.get(query);
-            updCosts.put(plannerName, optCost.getRows());
+            updCosts.put(plannerName, ((MyCost) optCost).getCost());
             zmq.optimizedCosts.put(query, updCosts);
             // debug
             if (!plannerName.equals("RL")) {

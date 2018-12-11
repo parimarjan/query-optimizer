@@ -383,13 +383,15 @@ def train(args, env):
             # viz_rl_plan.update(convert_to_html(rl_plan))
             # viz_lopt_plan.update(convert_to_html(lopt_plan))
 
-def cleanup():
-    # Send the signal to
-    # os.killpg(os.getpgid(JAVA_PROCESS.pid), signal.SIGTERM)
-    JAVA_PROCESS.kill()
-    print("killed the java server")
-
 def main():
+
+    def cleanup():
+        # Send the signal to
+        # os.killpg(os.getpgid(JAVA_PROCESS.pid), signal.SIGTERM)
+        env.socket.close()
+        JAVA_PROCESS.kill()
+        print("killed the java server")
+
     args = read_flags()
     start_java_server(args)
     time.sleep(5)

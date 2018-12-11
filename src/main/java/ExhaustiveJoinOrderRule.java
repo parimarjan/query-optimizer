@@ -169,7 +169,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       relBuilder.push(top.left)
           .project(relBuilder.fields(top.right));
       RelNode optNode = relBuilder.build();
-      double trueCost = mq.getCumulativeCost(optNode).getRows();
+      double trueCost = ((MyCost) mq.getCumulativeCost(optNode)).getCost();
       if (trueCost < bestCost) {
         // update it ONLY now.
         numAdded += 1;
@@ -196,6 +196,9 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       // choice
       curCost += qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
           curUnusedEdges, mq, rexBuilder);
+
+      // FIXME: using this might make things faster since the cost estimation
+      // just using RelMdUtil probably underestimates costs always(...)
       //qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
           //curUnusedEdges, mq, rexBuilder);
       // FIXME: very inefficient to rebuild the optNode etc. here.
@@ -206,7 +209,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       //}
       //Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(curRelNodes);
       //RelNode curOptNode = curTop.left;
-      //curCost += mq.getNonCumulativeCost(curOptNode).getRows();
+      //curCost += ((MyCost)mq.getNonCumulativeCost(curOptNode)).getCost();
 
       if (curCost >= bestCost) {
         System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);

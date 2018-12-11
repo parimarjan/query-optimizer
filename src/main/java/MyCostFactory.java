@@ -10,6 +10,9 @@ import java.util.Objects;
  * <p>This class is immutable: none of the methods modify any member
  * variables.</p>
  */
+
+// FIXME: change all comparison operators to consider cost instead of these
+// other things.
 class MyCost implements RelOptCost {
   //~ Static fields/initializers ---------------------------------------------
 
@@ -51,6 +54,10 @@ class MyCost implements RelOptCost {
   final double cpu;
   final double io;
   double rowCount;
+  // use rowCount, and other factors, to determine an actual cost.
+  // Currently, will just be set by the MetadataProvider creating this.
+  // FIXME: better way to integrate this?
+  public double cost;
 
   //~ Constructors -----------------------------------------------------------
 
@@ -58,6 +65,14 @@ class MyCost implements RelOptCost {
     this.rowCount = rowCount;
     this.cpu = cpu;
     this.io = io;
+    this.cost = rowCount;
+  }
+
+  MyCost(double rowCount, double cpu, double io, double cost) {
+    this.rowCount = rowCount;
+    this.cpu = cpu;
+    this.io = io;
+    this.cost = cost;
   }
 
   //~ Methods ----------------------------------------------------------------
@@ -78,43 +93,37 @@ class MyCost implements RelOptCost {
   }
 
   public boolean isLe(RelOptCost other) {
-		// FIXME:
 		MyCost that = (MyCost) other;
-		if (true) {
-			return this == that
-					//|| this.rowCount <= that.rowCount;
-					|| this.getRealRowCount() <= that.getRealRowCount();
-		}
-		return (this == that)
-				|| ((this.rowCount <= that.rowCount)
-				&& (this.cpu <= that.cpu)
-				&& (this.io <= that.io));
+    return this.cost <= that.cost;
+
+		//if (true) {
+			//return this == that
+          //|| this.rowCount <= that.rowCount;
+		//}
+		//return (this == that)
+				//|| ((this.rowCount <= that.rowCount)
+				//&& (this.cpu <= that.cpu)
+				//&& (this.io <= that.io));
   }
 
   public boolean isLt(RelOptCost other) {
     if (true) {
       MyCost that = (MyCost) other;
-      //return this.rowCount < that.rowCount;
-      return this.getRealRowCount() < that.getRealRowCount();
+      return this.cost < that.cost;
     }
     return isLe(other) && !equals(other);
-  }
-
-  private double getRealRowCount() {
-    int MEMORY_LIMIT = 1000;
-    int OVERFLOW_PENALTY = MEMORY_LIMIT*2;
-
-    int numOverflows = ((int) this.rowCount) / MEMORY_LIMIT;
-    //return this.rowCount + numOverflows * OVERFLOW_PENALTY;
-    return (this.rowCount / 1e8) + numOverflows * OVERFLOW_PENALTY;
   }
 
   public double getRows() {
     return rowCount;
   }
 
+  public double getCost() {
+    return cost;
+  }
+
   @Override public int hashCode() {
-    return Objects.hash(rowCount, cpu, io);
+    return Objects.hash(rowCount, cpu, io, cost);
   }
 
   public boolean equals(RelOptCost other) {
@@ -122,7 +131,8 @@ class MyCost implements RelOptCost {
         || other instanceof MyCost
         && (this.rowCount == ((MyCost) other).rowCount)
         && (this.cpu == ((MyCost) other).cpu)
-        && (this.io == ((MyCost) other).io);
+        && (this.io == ((MyCost) other).io)
+        && (this.cost == ((MyCost) other).cost);
   }
 
   public boolean isEqWithEpsilon(RelOptCost other) {
@@ -131,9 +141,10 @@ class MyCost implements RelOptCost {
     }
     MyCost that = (MyCost) other;
     return (this == that)
-        || ((Math.abs(this.getRealRowCount() - that.getRealRowCount()) < RelOptUtil.EPSILON)
+        || ((Math.abs(this.rowCount - that.rowCount) < RelOptUtil.EPSILON)
         && (Math.abs(this.cpu - that.cpu) < RelOptUtil.EPSILON)
-        && (Math.abs(this.io - that.io) < RelOptUtil.EPSILON));
+        && (Math.abs(this.io - that.io) < RelOptUtil.EPSILON)
+        && (Math.abs(this.cost - that.cost) < RelOptUtil.EPSILON));
   }
 
   public RelOptCost minus(RelOptCost other) {
@@ -144,16 +155,18 @@ class MyCost implements RelOptCost {
     return new MyCost(
         this.rowCount - that.rowCount,
         this.cpu - that.cpu,
-        this.io - that.io);
+        this.io - that.io,
+        this.cost - that.cost);
   }
 
   public RelOptCost multiplyBy(double factor) {
     if (this == INFINITY) {
       return this;
     }
-    return new MyCost(rowCount * factor, cpu * factor, io * factor);
+    return new MyCost(rowCount * factor, cpu * factor, io * factor, cost * factor);
   }
 
+  // FIXME: update this.
   public double divideBy(RelOptCost cost) {
     // Compute the geometric average of the ratios of all of the factors
     // which are non-zero and finite.
@@ -195,11 +208,12 @@ class MyCost implements RelOptCost {
     return new MyCost(
         this.rowCount + that.rowCount,
         this.cpu + that.cpu,
-        this.io + that.io);
+        this.io + that.io,
+        this.cost + that.cost);
   }
 
   public String toString() {
-    return "{" + rowCount + " rows, " + cpu + " cpu, " + io + " io}";
+    return "{" + cost + " cost, " + rowCount + " rows, " + cpu + " cpu, " + io + " io}";
   }
 
   /** Implementation of {@link org.apache.calcite.plan.RelOptCostFactory}

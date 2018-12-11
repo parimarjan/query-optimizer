@@ -185,7 +185,7 @@ public class RLJoinOrderRule extends RelOptRule {
           //.project(tmpRelBuilder.fields(curTop.right));
       //RelNode curOptNode = tmpRelBuilder.build();
       RelNode curOptNode = curTop.left;
-      double cost = mq.getNonCumulativeCost(curOptNode).getRows();
+      double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
 
       if (!onlyFinalReward) {
         costSoFar += cost;
