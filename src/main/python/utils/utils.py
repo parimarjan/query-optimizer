@@ -71,3 +71,17 @@ def get_model_name(args):
         return str(hash(str(args)))
     else:
         return args.suffix
+
+def adjust_learning_rate(args, optimizer, epoch):
+    """
+    FIXME: think about what makes sense for us?
+    Sets the learning rate to the initial LR decayed by half every 30 epochs
+    """
+    # lr = args.lr * (0.1 ** (epoch // 30))
+    lr = args.lr * (0.5 ** (epoch // 30))
+    lr = max(lr, args.min_lr)
+    if (epoch % 30 == 0):
+        print("new lr is: ", lr)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+

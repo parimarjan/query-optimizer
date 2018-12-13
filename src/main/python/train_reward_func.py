@@ -91,10 +91,13 @@ def train_reward_func(args, env):
         print("learning loss: ", learning_loss.data.cpu().numpy())
 
         ########### updating visdom  #############
+        est_rewards = est_rewards.data.cpu().numpy()
         if args.visdom:
             viz_ep_loss.update(ep, est_loss)
 
             assert len(est_rewards) == len(true_rewards), 'test'
+            # import pdb
+            # pdb.set_trace()
             viz_reward_estimates.update(range(len(est_rewards)), est_rewards,
                         update="replace", name="estimated values")
             viz_reward_estimates.update(range(len(est_rewards)), true_rewards,

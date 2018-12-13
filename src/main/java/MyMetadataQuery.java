@@ -44,7 +44,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
 	@Override
   public RelOptCost getCumulativeCost(RelNode rel) {
     //System.out.println("memory limit is: " + MEMORY_LIMIT);
-    if (rel instanceof Join && !COST_MODEL_NAME.equals("rowCount")) {
+    if (rel instanceof Join && !COST_MODEL_NAME.equals("")) {
       RelNode left = ((Join) rel).getLeft();
       RelNode right = ((Join) rel).getRight();
       RelOptCost leftCost = getCumulativeCost(left);

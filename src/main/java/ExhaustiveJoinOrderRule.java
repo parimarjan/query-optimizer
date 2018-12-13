@@ -190,6 +190,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       double curCost = costSoFar;
 
       final LoptMultiJoin2.Edge curEdge = curUnusedEdges.get(i);
+      // FIXME: should not be two right?
       assert curEdge.factors.cardinality() == 2;
       int [] factors = curEdge.factors.toArray();
       // this will take care of correctly updating the arrays to reflect our

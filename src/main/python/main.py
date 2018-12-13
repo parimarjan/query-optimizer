@@ -87,6 +87,8 @@ def read_flags():
                                 default=1, help="use the LOpt planner")
     parser.add_argument("-exh", type=int, required=False,
                                 default=0, help="use the exhaustive search planner")
+    parser.add_argument("-left_deep", type=int, required=False,
+                                default=0, help="use the left deep dp search planner")
     parser.add_argument("-adjust_learning_rate", type=int, required=False,
                                 default=0, help="adjust pytorch learning rate while training")
     parser.add_argument("-reward_damping", type=int, required=False,
@@ -105,9 +107,6 @@ def read_flags():
             etc.")
     parser.add_argument("-reward_normalization", type=str, required=False,
                                 default="min_max", help="type of reward normalization")
-
-    # parser.add_argument("-mode", type=str, required=False, default="train",
-            # help="test or train.")
 
     return parser.parse_args()
 
@@ -130,38 +129,18 @@ def find_cost(planOutput):
 def start_java_server(args):
     global JAVA_PROCESS
     JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
-    -Dexec.args="-query {query} -port {port} -mode {mode} -onlyFinalReward \
-    {final_reward} -lopt {lopt} -exhaustive {exh} -python 1 -verbose {verbose}"'
+    -Dexec.args="-query {query} -port {port} -train {train} -onlyFinalReward \
+    {final_reward} -lopt {lopt} -exhaustive {exh} -leftDeep {ld} -python 1 -verbose {verbose}"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
-    mode = ""
-    if args.train:
-        mode = "train"
-    else:
-        mode = "test"
-
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
-            mode=mode, final_reward=args.only_final_reward, lopt=args.lopt,
-            exh=args.exh, verbose=args.verbose)
+            train=args.train, final_reward=args.only_final_reward, lopt=args.lopt,
+            exh=args.exh, ld = args.left_deep, verbose=args.verbose)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")
 
-def adjust_learning_rate(args, optimizer, epoch):
-    """
-    FIXME: think about what makes sense for us?
-    Sets the learning rate to the initial LR decayed by half every 30 epochs
-    """
-    # lr = args.lr * (0.1 ** (epoch // 30))
-    lr = args.lr * (0.5 ** (epoch // 30))
-    lr = max(lr, args.min_lr)
-    if (epoch % 30 == 0):
-        print("new lr is: ", lr)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
 def train(args, env):
-
     ################## Visdom Setup ######################
     if args.visdom:
         env_name = "queries: " + str(env.query_set) + "-plots-" + args.suffix
@@ -354,6 +333,9 @@ def train(args, env):
             if args.exh:
                 # exh_plan = env.get_optimized_plans("EXHAUSTIVE")
                 exh_cost = env.get_optimized_costs("EXHAUSTIVE")
+            if args.left_deep:
+                ld_cost = env.get_optimized_costs("LEFT_DEEP");
+                print("ld cost is: ", ld_cost)
 
             rl_cost = env.get_optimized_costs("RL")
 
@@ -372,6 +354,9 @@ def train(args, env):
                 else:
                     viz_ep_costs.update(ep, exh_cost,
                             name="Exhaustive")
+            if args.left_deep:
+                viz_ep_costs.update(ep, ld_cost,
+                        name="Left Deep")
 
             if args.query < 0:
                 viz_ep_costs.update(ep, math.log(rl_cost),
@@ -379,6 +364,7 @@ def train(args, env):
             else:
                 viz_ep_costs.update(ep, rl_cost,
                         name="RL")
+
 
             # viz_rl_plan.update(convert_to_html(rl_plan))
             # viz_lopt_plan.update(convert_to_html(lopt_plan))

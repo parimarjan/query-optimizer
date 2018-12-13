@@ -44,7 +44,7 @@ public class QueryOptExperiment {
         DEBUG,
         BUSHY,
         RL,
-        DQ;
+        LEFT_DEEP;
 
         // using com.google.ImmutableList because we can't declare ArrayList in
         // static context.
@@ -67,6 +67,8 @@ public class QueryOptExperiment {
             ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE);
                              //FilterJoinRule.FILTER_ON_JOIN,
                              //ProjectMergeRule.INSTANCE);
+        public static final ImmutableList<RelOptRule> LEFT_DEEP_RULES =
+            ImmutableList.of(LeftDeepJoinOrderRule.INSTANCE);
 
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
@@ -113,6 +115,8 @@ public class QueryOptExperiment {
               return BUSHY_RULES;
             case RL:
               return RL_RULES;
+            case LEFT_DEEP:
+              return LEFT_DEEP_RULES;
             default:
               return null;
           }
@@ -150,7 +154,10 @@ public class QueryOptExperiment {
     private static String costModelName;
     private static boolean onlyFinalReward;
     private static boolean verbose;
-    private static boolean useSavedCosts = false;
+    private static boolean train;
+
+    // FIXME: temporary. Get rid of this soon.
+    private static boolean useSavedCosts = true;
 
     /*
     *************************************************************************
@@ -164,10 +171,11 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose) throws SQLException {
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose, boolean train) throws SQLException {
         // FIXME: make this as a variable arg.
         this.executeOnDB = false;
-        this.costModelName = "CM2";
+        this.train = train;
+        this.costModelName = "";
         this.onlyFinalReward = onlyFinalReward;
         this.verbose = verbose;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
@@ -193,6 +201,7 @@ public class QueryOptExperiment {
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
+            System.out.println(f.getName());
             //if (f.getName().contains("3.sql")) {
                 String sql;
                 try {
@@ -212,77 +221,6 @@ public class QueryOptExperiment {
         }
     }
 
-    /* Runs all the volcanoPlanners we have on all the given allSqlQueries, and
-     * collects statistics about each run.
-     */
-    public void run(ArrayList<String> queries) throws Exception {
-        int numSuccessfulQueries = 0;
-        int numFailedQueries = 0;
-        for (String query : queries) {
-            for (int i = 0; i < volcanoPlanners.size(); i++) {
-              if (planAndExecuteQuery(query, i)) {
-                numSuccessfulQueries += 1;
-              } else numFailedQueries += 1;
-            }
-        }
-        System.out.println("numSuccessfulQueries = " + numSuccessfulQueries);
-        System.out.println("numFailedQueries = " + numFailedQueries);
-    }
-
-    public void test(ArrayList<Integer> queries) throws Exception
-    {
-      // we will treat queries as a pool of sample data. After every reset, we
-      // choose a new
-      int numSuccessfulQueries = 0;
-      int numFailedQueries = 0;
-      zmq.curQuerySet = queries;
-      // start a server, and wait for a command.
-      zmq.waitForClientTill("getAttrCount");
-      for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
-        // basically wait for reset every time.
-        zmq.waitForClientTill("reset");
-        zmq.reset = false;
-        String query = allSqlQueries.get(queries.get(nextQuery));
-        zmq.query = query;
-        for (int i = 0; i < volcanoPlanners.size(); i++) {
-          boolean success = planAndExecuteQuery(query, i);
-          if (!success) {
-            System.out.println("failed in query " + nextQuery);
-          }
-        }
-        if (executeOnDB) {
-          if (!verifyResults(query)) {
-            System.out.println("verifying results failed");
-            System.exit(-1);
-          } else {
-            System.out.println("verifying results succeeded");
-          }
-        }
-      }
-
-      for (int nextQuery = 0; nextQuery < queries.size(); nextQuery++) {
-        // basically wait for reset every time.
-        zmq.waitForClientTill("reset");
-        zmq.reset = false;
-        String query = allSqlQueries.get(queries.get(nextQuery));
-        zmq.query = query;
-        System.out.println("next query: " + nextQuery);
-        for (int i = 0; i < volcanoPlanners.size(); i++) {
-          boolean success = planAndExecuteQuery(query, i);
-          if (!success) {
-            System.out.println("failed in query " + nextQuery);
-          }
-        }
-        if (executeOnDB) {
-          if (!verifyResults(query)) {
-            System.out.println("verifying results failed");
-            System.exit(-1);
-          } else {
-            System.out.println("verifying results succeeded");
-          }
-        }
-      }
-    }
 
     /* This function will act as zeromq server controlled by an agent on the
      * client side (currently an RL agent in Python), using standard openAI gym
@@ -297,24 +235,30 @@ public class QueryOptExperiment {
       zmq.curQuerySet = queries;
       // start a server, and wait for a command.
       zmq.waitForClientTill("getAttrCount");
+      int nextQuery = -1;
       while (true) {
         // basically wait for reset every time.
         // FIXME: add a way to make it possible to send end command.
-
         // pick a random query for this episode
-        //System.out.println("queries size is: " + queries.size());
         // FIXME: reasoning here gets somewhat convoluted. Simplify it. Right now, very important to do this BEFORE selecting the next query, or else we might give stale info to python client causing deadlock.
         zmq.waitForClientTill("reset");
         zmq.reset = false;
-        int nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        if (train ) {
+          nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        } else {
+          nextQuery = (nextQuery + 1) % queries.size();
+        }
         if (verbose) System.out.println("nextQuery is: " + nextQuery);
         String query = allSqlQueries.get(queries.get(nextQuery));
         zmq.query = query;
-        //System.out.println("next query: " + nextQuery);
         for (int i = 0; i < volcanoPlanners.size(); i++) {
-          boolean success = planAndExecuteQuery(query, i);
-          if (!success) {
-            System.out.println("failed in query " + nextQuery);
+          try {
+            boolean success = planAndExecuteQuery(query, i);
+          } catch (Exception e) {
+            System.out.println(query);
+            System.out.println("failed in planAndExecute for query number " + nextQuery);
+            String plannerName = plannerTypes.get(i).name();
+            zmq.optimizedCosts.get(query).put(plannerName, 0.00);
           }
         }
         if (executeOnDB) {
@@ -349,6 +293,11 @@ public class QueryOptExperiment {
     {
         Planner planner = volcanoPlanners.get(plannerNum);
         String plannerName = plannerTypes.get(plannerNum).name();
+        //System.out.println("planner name: " + plannerName);
+        // doing this at the start because there are many possible exit
+        // points because of various failures.
+        planner.close();
+        planner.reset();
         // first, have we already run this planner + query combination before?
         // In that case, we have no need to execute it again, as the result
         // will be stored in the zmq object.
@@ -359,23 +308,26 @@ public class QueryOptExperiment {
           // this query has not been seen so far.
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
         } else if (!executeOnDB && useSavedCosts) {
+          // FIXME: important, we're skipping over the rest.
           // for RL, or if we need to executeOnDb, we always continue executing.
-          if (!plannerName.equals("RL")) {
+          //if (!plannerName.equals("RL")) {
+          if (plannerName.equals("EXHAUSTIVE")) {
             // let's check if this planner has been seen for this query.
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
-              //System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
+              System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
+            } else {
+              // FIXME: temporary to avoid rexecuting exhaustive search.
+              if (plannerName.equals("EXHAUSTIVE")) {
+                System.out.println("not running the search algorithm for " + plannerName);
+                return true;
+              }
             }
           }
         }
 
-        //System.out.println("planner name: " + plannerName);
-        // doing this at the start because there are many possible exit
-        // points because of various failures.
-        planner.close();
-        planner.reset();
         RelNode node = null;
         try {
             SqlNode sqlNode = planner.parse(query);

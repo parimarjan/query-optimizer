@@ -44,8 +44,8 @@ class QueryOptEnv():
         self.only_join_condition_attributes = False
         self.only_final_reward = only_final_reward
         # parameters
-        self.reward_damping_factor = 100000.00
-        # self.reward_damping_factor = 1.00
+        # self.reward_damping_factor = 100000.00
+        self.reward_damping_factor = 1.00
         # will store min_reward / max_reward for each unique query
         # will map query: (min_reward, max_reward)
         self.reward_mapper = {}
@@ -83,7 +83,7 @@ class QueryOptEnv():
     def get_optimized_costs(self, name):
         self.send(b"getJoinsCost")
         resp = float(self.send(name))
-        assert resp != 0, "sanity check"
+        # assert resp != 0, "sanity check"
         return resp
 
     def get_num_input_features(self):
@@ -161,8 +161,8 @@ class QueryOptEnv():
 
     def normalize_reward(self, reward):
         # FIXME: is this really needed?
-        # if self.only_final_reward:
-            # return reward / self.reward_damping_factor
+        if self.only_final_reward:
+            return reward / self.reward_damping_factor
         assert not (self.reward_damping and self.reward_normalization ==
                 "min_max"), "both of these should not be on at same time"
         if self.reward_damping:
@@ -215,7 +215,8 @@ class QueryOptEnv():
             self.reward_mapper[query] = (self.min_reward, self.max_reward)
 
             # FIXME: dumb hack
-            self.reset()
+            return self.reset()
+        return query
 
     def action_space(self):
         """
