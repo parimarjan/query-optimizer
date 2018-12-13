@@ -211,6 +211,7 @@ public class QueryGraphUtils {
     if (vertex instanceof LeafVertex) {
       LeafVertex leafVertex = (LeafVertex) vertex;
       final Mappings.TargetMapping mapping =
+          // FIXME: Seems to fail sometimes here!!
           Mappings.offsetSource(
               Mappings.createIdentity(
                   leafVertex.rel.getRowType().getFieldCount()),

@@ -157,7 +157,7 @@ public class QueryOptExperiment {
     private static boolean train;
 
     // FIXME: temporary. Get rid of this soon.
-    private static boolean useSavedCosts = true;
+    private static boolean useSavedCosts = false;
 
     /*
     *************************************************************************
@@ -256,8 +256,10 @@ public class QueryOptExperiment {
             boolean success = planAndExecuteQuery(query, i);
           } catch (Exception e) {
             System.out.println(query);
-            System.out.println("failed in planAndExecute for query number " + nextQuery);
             String plannerName = plannerTypes.get(i).name();
+            System.out.println("failed in planAndExecute for " + plannerName + " for query number " + nextQuery);
+            System.out.println(e);
+            e.printStackTrace();
             zmq.optimizedCosts.get(query).put(plannerName, 0.00);
           }
         }

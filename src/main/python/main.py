@@ -4,7 +4,6 @@ from query_opt_env import QueryOptEnv
 import argparse
 from utils.net import TestQNetwork, CostModelNetwork
 from utils.logger import Logger
-# from utils.utils import copy_network, save_network, get_model_names, to_variable
 from utils.utils import *
 from utils.learn import egreedy_action, Qvalues, Qtargets, gradient_descent
 from utils.models import ReplayMemory
