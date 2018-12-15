@@ -113,20 +113,12 @@ class Main {
     }
     ArrayList<Integer> queries = new ArrayList<Integer>();
     updateQueries(nextQuery, queries);
-    for (Integer i : queries) {
-      System.out.println(i);
-      System.out.println(exp.allSqlQueries.get(i));
-    }
+    //for (Integer i : queries) {
+      //System.out.println(i);
+      //System.out.println(exp.allSqlQueries.get(i));
+    //}
     QueryOptExperiment.getZMQServer().curQuerySet = queries;
     exp.train(queries);
-    //if (mode.equals("train")) {
-      //exp.train(queries);
-    //} else if (mode.equals("test")) {
-      //exp.test(queries);
-    //} else if (mode.equals("run")) {
-      //// FIXME: test functionality for this
-      ////exp.run(exp.allSqlQueries);
-    //}
   }
 }
 

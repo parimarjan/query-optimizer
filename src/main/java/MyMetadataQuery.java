@@ -23,7 +23,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
   // in terms of number of rows. This is used for calculating the cost in a
   // non-linear model.
-  private final double MEMORY_LIMIT = Math.pow(10, 2);
+  private final double MEMORY_LIMIT = Math.pow(10, 5);
   // TODO: support options: CM1, CM2, CM3, RowCount
   private final String COST_MODEL_NAME;
 
@@ -77,7 +77,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
         // fit in the memory or not.
         if ((leftRows + rightRows) < MEMORY_LIMIT) {
           return orig_cost;
-        } else if (Math.min(leftRows, rightRows) < (Math.pow(MEMORY_LIMIT, 1))) {
+        } else if (Math.min(leftRows, rightRows) < MEMORY_LIMIT) {
           //System.out.println("!!!case 2!!!");
           double newCost = 2*(leftRows + rightRows) + curRows;
           ((MyCost) orig_cost).cost = newCost;

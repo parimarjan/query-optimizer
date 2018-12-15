@@ -373,7 +373,10 @@ def main():
     def cleanup():
         # Send the signal to
         # os.killpg(os.getpgid(JAVA_PROCESS.pid), signal.SIGTERM)
-        env.socket.close()
+        # env.send("END")
+        # env.reset()
+        # time.sleep(5)
+        # env.socket.close()
         JAVA_PROCESS.kill()
         print("killed the java server")
 

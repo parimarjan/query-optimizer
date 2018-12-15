@@ -157,7 +157,7 @@ public class QueryOptExperiment {
     private static boolean train;
 
     // FIXME: temporary. Get rid of this soon.
-    private static boolean useSavedCosts = false;
+    private static boolean useSavedCosts = true;
 
     /*
     *************************************************************************
@@ -175,7 +175,8 @@ public class QueryOptExperiment {
         // FIXME: make this as a variable arg.
         this.executeOnDB = false;
         this.train = train;
-        this.costModelName = "";
+        //this.costModelName = "";
+        this.costModelName = "CM2";
         this.onlyFinalReward = onlyFinalReward;
         this.verbose = verbose;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
@@ -201,8 +202,6 @@ public class QueryOptExperiment {
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
-            System.out.println(f.getName());
-            //if (f.getName().contains("3.sql")) {
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -237,11 +236,16 @@ public class QueryOptExperiment {
       zmq.waitForClientTill("getAttrCount");
       int nextQuery = -1;
       while (true) {
+        // FIXME: temporary until we get the communication stuff to work
+        // properly.
+        System.out.println("num failed queries: " + numFailedQueries);
+        System.out.println("num successful queries: " + numSuccessfulQueries);
         // basically wait for reset every time.
         // FIXME: add a way to make it possible to send end command.
         // pick a random query for this episode
         // FIXME: reasoning here gets somewhat convoluted. Simplify it. Right now, very important to do this BEFORE selecting the next query, or else we might give stale info to python client causing deadlock.
         zmq.waitForClientTill("reset");
+        if (zmq.END) break;
         zmq.reset = false;
         if (train ) {
           nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
@@ -254,13 +258,20 @@ public class QueryOptExperiment {
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           try {
             boolean success = planAndExecuteQuery(query, i);
+            if (plannerTypes.get(i).name().equals("EXHAUSTIVE")) {
+              numSuccessfulQueries += 1;
+            }
           } catch (Exception e) {
-            System.out.println(query);
+            //System.out.println(query);
             String plannerName = plannerTypes.get(i).name();
+            if (plannerName.equals("EXHAUSTIVE")) {
+              numFailedQueries += 1;
+            }
             System.out.println("failed in planAndExecute for " + plannerName + " for query number " + nextQuery);
-            System.out.println(e);
-            e.printStackTrace();
-            zmq.optimizedCosts.get(query).put(plannerName, 0.00);
+            //System.out.println(e);
+            //e.printStackTrace();
+            //zmq.optimizedCosts.get(query).put(plannerName, 0.00);
+            //throw e;
           }
         }
         if (executeOnDB) {
@@ -272,6 +283,8 @@ public class QueryOptExperiment {
           }
         }
       }
+      System.out.println("num failed queries: " + numFailedQueries);
+      System.out.println("num successful queries: " + numSuccessfulQueries);
     }
 
     public static String getCostModelName() {
@@ -320,12 +333,6 @@ public class QueryOptExperiment {
               // have already run this, so don't have to do it again.
               System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
-            } else {
-              // FIXME: temporary to avoid rexecuting exhaustive search.
-              if (plannerName.equals("EXHAUSTIVE")) {
-                System.out.println("not running the search algorithm for " + plannerName);
-                return true;
-              }
             }
           }
         }

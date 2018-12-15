@@ -43,6 +43,8 @@ def test(args, env):
     rl_opts = []
     ld_opts = []
     queries_seen = []
+    stored_exh_cost = 0
+    no_exh = 0
 
     for ep in range(args.num_episodes):
         done = False
@@ -80,9 +82,13 @@ def test(args, env):
             lopt_cost = env.get_optimized_costs("LOpt")
             rl_cost = env.get_optimized_costs("RL")
             exh_cost = env.get_optimized_costs("EXHAUSTIVE")
-            if (exh_cost == 0):
-                exh_cost = min(lopt_cost, rl_cost)
             ld_cost = env.get_optimized_costs("LEFT_DEEP")
+            if (exh_cost == 0):
+                print("exh cost was 0")
+                exh_cost = min(lopt_cost, rl_cost, ld_cost)
+                no_exh += 1
+            else:
+                stored_exh_cost += 1
             if (ld_cost != 0):
                 if (len(ld_opts) > 0):
                     if not (ld_cost == ld_opts[-1]):
@@ -122,6 +128,8 @@ def test(args, env):
     print_results(lopt_opts, "lopt")
     print_results(rl_opts, "rl")
     print_results(ld_opts, "ld")
+    print("stored exh cost: " , stored_exh_cost)
+    print("no exh cost: ", no_exh)
 
     # print(len(lopt_opts), lopt_opts)
     # print(len(rl_opts), rl_opts)

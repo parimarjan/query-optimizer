@@ -23,6 +23,7 @@ public class ZeroMQServer {
   public int episodeNum = 0;
   public int nextAction = -1;
   public boolean reset = false;
+  public boolean END = false;
   public int episodeDone = 0;
   public double lastReward = 0;
   public double lastTrueReward = 0;
@@ -50,6 +51,8 @@ public class ZeroMQServer {
     HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
     if (oldCosts != null) {
       optimizedCosts = oldCosts;
+      System.out.println("initializing saved costs ...");
+      System.out.println("number of queries with saved costs: " + optimizedCosts.size());
     }
   }
 
@@ -106,6 +109,11 @@ public class ZeroMQServer {
     String plannerName;
     switch (msg)
     {
+      case "END":
+        if (verbose) System.out.println("got END command");
+        END = true;
+        resp = "";
+        break;
       case "getJoinsCost":
         if (verbose) System.out.println("getJoinsCost");
         //resp = "";

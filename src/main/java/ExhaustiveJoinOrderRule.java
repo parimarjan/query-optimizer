@@ -135,6 +135,11 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       if (newEdge) unusedEdges.add(edge);
     }
     System.out.println("final length of unusedEdges: " + unusedEdges.size());
+    // FIXME: temporary
+    if (unusedEdges.size() >= 11) {
+      // don't want to do this!
+      return;
+    }
 
     final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     numAdded = 0;
@@ -184,7 +189,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
 
     for (int i = 0; i < unusedEdges.size(); i++) {
       // create local copies of the input arrays at the current level of recursion
-      List<QueryGraphUtils.Vertex> curVertexes = new ArrayList(vertexes);
+      List<QueryGraphUtils.Vertex> curVertexes = vertexes;
       List<LoptMultiJoin2.Edge> curUsedEdges = new ArrayList(usedEdges);
       List<LoptMultiJoin2.Edge> curUnusedEdges = new ArrayList(unusedEdges);
       double curCost = costSoFar;
@@ -195,28 +200,32 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       int [] factors = curEdge.factors.toArray();
       // this will take care of correctly updating the arrays to reflect our
       // choice
-      curCost += qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
-          curUnusedEdges, mq, rexBuilder);
+      double estCost = qGraphUtils.updateGraph(curVertexes, factors,
+          curUsedEdges, curUnusedEdges, mq, rexBuilder);
+      // FIXME: decompose vertexes -> relNode function
+      List<Pair<RelNode, TargetMapping>> curRelNodes = new ArrayList<>();
+      RelBuilder rBuilder = call.builder();
+      for (QueryGraphUtils.Vertex v : curVertexes) {
+        qGraphUtils.updateRelNodes(v, curRelNodes, rexBuilder, rBuilder, multiJoin);
+      }
+      Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(curRelNodes);
+      // FIXME: is it ok to not have any of these projections?
+      rBuilder.push(curTop.left);
+          //.project(rBuilder.fields(curTop.right));
+      RelNode curOptNode = rBuilder.build();
 
-      // FIXME: using this might make things faster since the cost estimation
-      // just using RelMdUtil probably underestimates costs always(...)
-      //qGraphUtils.updateGraph(curVertexes, factors, curUsedEdges,
-          //curUnusedEdges, mq, rexBuilder);
-      // FIXME: very inefficient to rebuild the optNode etc. here.
-      //List<Pair<RelNode, TargetMapping>> curRelNodes = new ArrayList<>();
-      //RelBuilder rBuilder = call.builder();
-      //for (QueryGraphUtils.Vertex v : curVertexes) {
-        //qGraphUtils.updateRelNodes(v, curRelNodes, rexBuilder, rBuilder, multiJoin);
-      //}
-      //Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(curRelNodes);
-      //RelNode curOptNode = curTop.left;
-      //curCost += ((MyCost)mq.getNonCumulativeCost(curOptNode)).getCost();
+      curCost += ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
 
       if (curCost >= bestCost) {
         System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);
         continue;
       }
       recursiveAddNodes(call, curVertexes, curUsedEdges, curUnusedEdges, rexBuilder, curCost);
+      // TODO: I believe the behaviour will be correct even without removing
+      // the last element as the updated edges will be pointing to the right
+      // factors in each search branch. But just in case. Can look further into
+      // this to ensure I understand it correctly.
+      curVertexes.remove(curVertexes.size() - 1);
     }
   }
 
