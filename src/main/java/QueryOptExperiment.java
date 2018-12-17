@@ -171,12 +171,12 @@ public class QueryOptExperiment {
      * @plannerTypes
      * @dataset
      */
-    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose, boolean train) throws SQLException {
+    public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE> plannerTypes, QUERIES_DATASET queries, int port, boolean onlyFinalReward, boolean verbose, boolean train, String costModelName, boolean executeOnDB) throws SQLException {
         // FIXME: make this as a variable arg.
-        this.executeOnDB = false;
+        this.executeOnDB = executeOnDB;
         this.train = train;
-        //this.costModelName = "";
-        this.costModelName = "CM2";
+        this.costModelName = costModelName;
+        //this.costModelName = "CM2";
         this.onlyFinalReward = onlyFinalReward;
         this.verbose = verbose;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);

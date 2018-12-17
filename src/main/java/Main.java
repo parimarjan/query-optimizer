@@ -24,6 +24,8 @@ class Main {
     options.addOption(newOption("leftDeep", "use dynamic programming based left deep search planner or not"));
     options.addOption(newOption("verbose", "use exhaustive search planner or not"));
     options.addOption(newOption("train", "use exhaustive search planner or not"));
+    options.addOption(newOption("executeOnDB", "execute on DB or not"));
+    options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
 
     CommandLineParser parser = new DefaultParser();
     HelpFormatter formatter = new HelpFormatter();
@@ -78,6 +80,8 @@ class Main {
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
 
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
+    boolean executeOnDB = (Integer.parseInt(cmd.getOptionValue("executeOnDB", "0")) == 1);
+    String costModel = cmd.getOptionValue("costModel", "");
 
     // FIXME: helper utility to just print out all the options?
     System.out.println("using zmq port " + port);
@@ -87,6 +91,8 @@ class Main {
     System.out.println("python " + python);
     System.out.println("exhaustive " + exhaustive);
     System.out.println("left deep search " + leftDeep);
+    System.out.println("costModel " + costModel);
+    System.out.println("executeOnDB " + executeOnDB);
 
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     if (exhaustive) {
@@ -106,7 +112,7 @@ class Main {
 
     QueryOptExperiment exp = null;
     try {
-        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward, verbose, train);
+        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward, verbose, train, costModel, executeOnDB);
     } catch (Exception e) {
         System.err.println("Sql Exception!");
         throw e;

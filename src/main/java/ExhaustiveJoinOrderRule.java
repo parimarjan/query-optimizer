@@ -73,6 +73,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   private double bestCost = 1000000000.00;
   //private List<QueryGraphUtils.Vertex> bestVertexes = null;
   private RelNode bestOptNode = null;
+  private int totalOpts;
 
   /** Creates an ExhaustiveJoinOrderRule. */
   public ExhaustiveJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -90,6 +91,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   {
     bestCost = 1000000000.00;
     bestOptNode = null;
+    totalOpts = 0;
     // Setting original expressions importance to 0, so our choice will be
     // chosen.
     RelNode orig = call.getRelList().get(0);
@@ -136,7 +138,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
     }
     System.out.println("final length of unusedEdges: " + unusedEdges.size());
     // FIXME: temporary
-    if (unusedEdges.size() >= 11) {
+    if (unusedEdges.size() >= 13) {
       // don't want to do this!
       return;
     }
@@ -154,6 +156,10 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
 
   private void recursiveAddNodes(RelOptRuleCall call, List<QueryGraphUtils.Vertex> vertexes, List<LoptMultiJoin2.Edge> usedEdges, List<LoptMultiJoin2.Edge> unusedEdges, RexBuilder rexBuilder, double costSoFar)
   {
+    totalOpts += 1;
+    if (totalOpts % 10000 == 0) {
+      System.out.println("totalOpts = " + totalOpts);
+    }
     //System.out.println("size of unusedEdges: " + unusedEdges.size());
     //System.out.println("costSoFar: " + costSoFar);
     //System.out.println("recursive call, size = " + unusedEdges.size());
@@ -217,7 +223,7 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
       curCost += ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
 
       if (curCost >= bestCost) {
-        System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);
+        //System.out.println("pruning branch!, numAdded = " + numAdded + " i = " + i);
         continue;
       }
       recursiveAddNodes(call, curVertexes, curUsedEdges, curUnusedEdges, rexBuilder, curCost);

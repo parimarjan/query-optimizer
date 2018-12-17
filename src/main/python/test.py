@@ -84,7 +84,6 @@ def test(args, env):
             exh_cost = env.get_optimized_costs("EXHAUSTIVE")
             ld_cost = env.get_optimized_costs("LEFT_DEEP")
             if (exh_cost == 0):
-                print("exh cost was 0")
                 exh_cost = min(lopt_cost, rl_cost, ld_cost)
                 no_exh += 1
             else:

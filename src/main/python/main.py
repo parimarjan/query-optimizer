@@ -96,7 +96,8 @@ def read_flags():
                                 default=0, help="clip min max normalization")
     parser.add_argument("-visdom", type=int, required=False, default=1,
             help="do visdom vizualizations for this run or not")
-
+    parser.add_argument("-executeOnDB", type=int, required=False, default=0,
+            help="execute on database or not")
 
     # strings
     parser.add_argument("-dir", type=str, required=False,
@@ -106,7 +107,8 @@ def read_flags():
             etc.")
     parser.add_argument("-reward_normalization", type=str, required=False,
                                 default="min_max", help="type of reward normalization")
-
+    parser.add_argument("-costModel", type=str, required=False,
+                                default="rowCount", help="")
     return parser.parse_args()
 
 def find_cost(planOutput):
@@ -129,12 +131,14 @@ def start_java_server(args):
     global JAVA_PROCESS
     JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
     -Dexec.args="-query {query} -port {port} -train {train} -onlyFinalReward \
-    {final_reward} -lopt {lopt} -exhaustive {exh} -leftDeep {ld} -python 1 -verbose {verbose}"'
+    {final_reward} -lopt {lopt} -exhaustive {exh} -leftDeep {ld} -python 1 \
+    -verbose {verbose} -costModel {cm} -executeOnDB {execute}"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
             train=args.train, final_reward=args.only_final_reward, lopt=args.lopt,
-            exh=args.exh, ld = args.left_deep, verbose=args.verbose)
+            exh=args.exh, ld = args.left_deep, verbose=args.verbose,
+            cm = args.costModel, execute = args.executeOnDB)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")

@@ -54,8 +54,9 @@ public class MyMetadataQuery extends RelMetadataQuery {
       if (COST_MODEL_NAME.equals("CM2")) {
         return leftCost.plus(rightCost).plus(curCost);
       } else {
-        System.err.println("unsupported cost model " + COST_MODEL_NAME);
-        System.exit(-1);
+        // FIXME:
+        //System.err.println("unsupported cost model " + COST_MODEL_NAME);
+        //System.exit(-1);
       }
     }
     // else just treat it as usual
