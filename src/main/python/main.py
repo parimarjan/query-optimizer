@@ -402,9 +402,9 @@ def main():
             train(args, env)
         elif args.test:
             test(args, env)
-    except Exception:
+    except Exception as e:
+        print(e)
         cleanup()
-        raise
     print("after train!")
     cleanup()
 

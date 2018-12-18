@@ -71,29 +71,11 @@ public class RLJoinOrderRule extends RelOptRule {
 
   private final PrintWriter pw = null;
   private boolean onlyFinalReward;
+  private ArrayList<Integer> joinOrderSeq;
 
   /** Creates an RLJoinOrderRule. */
   public RLJoinOrderRule(RelBuilderFactory relBuilderFactory) {
     super(operand(MultiJoin.class, any()), relBuilderFactory, null);
-  }
-
-  private void printStuff(RelNode rel) {
-    if (rel == null) {
-      System.out.println("rel was null");
-      return;
-    }
-    System.out.println("rel class: " + rel.getClass().getName());
-    System.out.println("digest: " + rel.recomputeDigest());
-    if (rel instanceof RelSubset) {
-      RelSubset s = (RelSubset) rel;
-      printStuff(s.getOriginal());
-    } else if (rel instanceof Filter) {
-      System.out.println("filter!");
-      printStuff(rel.getInput(0));
-    } else if (rel instanceof TableScan) {
-      System.out.println("table scan!");
-      System.out.println("table name: " + rel.getTable().getQualifiedName());
-    }
   }
 
   @Deprecated // to be removed before 2.0
@@ -105,6 +87,7 @@ public class RLJoinOrderRule extends RelOptRule {
   @Override
   public void onMatch(RelOptRuleCall call)
   {
+    joinOrderSeq = new ArrayList<Integer>();
     // setting original expression's importance to 0
     RelNode orig = call.getRelList().get(0);
     call.getPlanner().setImportance(orig, 0.0);
@@ -318,6 +301,8 @@ public class RLJoinOrderRule extends RelOptRule {
     } else {
       edgeOrdinal = zmq.nextAction;
     }
+    joinOrderSeq.add(edgeOrdinal);
+    zmq.joinOrderSeq = joinOrderSeq;
     //System.out.println("edgeOrdinal chosen: " + edgeOrdinal);
     final LoptMultiJoin2.Edge bestEdge = unusedEdges.get(edgeOrdinal);
 

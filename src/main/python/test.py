@@ -14,6 +14,10 @@ import time
 import random
 import math
 import pandas as pd
+pd.set_option("display.precision", 2)
+from collections import defaultdict
+import re
+import glob
 
 # to execute the java process
 import subprocess as sp
@@ -21,7 +25,40 @@ import os
 import signal
 import subprocess
 
+ALGS = ["LOpt", "LEFT_DEEP", "EXHAUSTIVE", "RL"]
+QUERY_DIR = "./join-order-benchmark/"
+
+def get_num_from_string(string):
+    '''
+    '''
+    # matches scientific notation and stuff.
+    numbers = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
+            string)
+    # all the things we are printing so far has just 1 num.
+    if len(numbers) >= 1:
+        return int(numbers[0])
+    else:
+        return None
+
+
+def get_query_map():
+    fns = glob.glob(QUERY_DIR + "*.sql")
+    print("number of queries: ", len(fns))
+    qmap = {}
+    for f in fns:
+        query = open(f, "r").read()
+        # FIXME: hack
+        # qmap[query[0:100]] = get_num_from_string(f)
+        # do calcite rewrites here
+        query = query.replace(";","")
+        query = query.replace("!=", "<>")
+        qmap[query] = get_num_from_string(f)
+        # qmap[hash(query.strip())] = get_num_from_string(f)
+    return qmap
+
 def test(args, env):
+    query_map = get_query_map()
+
     num_input_features = env.get_num_input_features()
     model_names = get_model_names(get_model_name(args), args.dir)
     model_name = model_names[-1]
@@ -37,20 +74,15 @@ def test(args, env):
                 "title": "per query costs"})
 
     # just iterate over all samples in env
-    num_good = 0
-    num_bad = 0
-    lopt_opts = []
-    rl_opts = []
-    ld_opts = []
     queries_seen = []
-    stored_exh_cost = 0
-    no_exh = 0
+    all_data = defaultdict(list)
 
     for ep in range(args.num_episodes):
         done = False
         query = env.reset()
         if query in queries_seen:
             continue
+
         queries_seen.append(query)
 
         ep_rewards = []
@@ -74,72 +106,42 @@ def test(args, env):
             total_remaining_rewards.append(total_remaining_reward)
 
         real_loss = np.sum(np.array(total_remaining_rewards)-np.array(ep_max_qvals))
-        # rl_plan = env.get_optimized_plans("RL")
         assert args.lopt, "testing should use it"
 
-        if args.lopt:
-            lopt_cost = env.get_optimized_costs("LOpt")
-            rl_cost = env.get_optimized_costs("RL")
-            exh_cost = env.get_optimized_costs("EXHAUSTIVE")
-            ld_cost = env.get_optimized_costs("LEFT_DEEP")
-            if (exh_cost == 0):
-                exh_cost = min(lopt_cost, rl_cost, ld_cost)
-                no_exh += 1
-            else:
-                stored_exh_cost += 1
-            if (ld_cost != 0):
-                if (len(ld_opts) > 0):
-                    if not (ld_cost == ld_opts[-1]):
-                        ld_opts.append(ld_cost / exh_cost)
-                else:
-                    ld_opts.append(ld_cost / exh_cost)
+        # query_key = query[0:100]
+        # query_key = hash(query.strip())
+        query_key = query
+        if query_key in query_map:
+            all_data["query_template"].append(query_map[query_key])
+        join_order_seq = env.send("joinOrderSeq")
+        all_data["RL Join Order"].append(join_order_seq.strip())
 
-            lopt_opts.append(lopt_cost / exh_cost)
-            rl_opts.append(rl_cost / exh_cost)
+        for alg in ALGS:
+            cost = env.get_optimized_costs(alg)
+            all_data[alg].append(cost)
 
-            if lopt_cost < rl_cost:
-                num_bad += 1
-            else:
-                num_good += 1
-        if args.lopt:
-            viz_ep_costs.update(ep, lopt_cost,
-                    name="LOpt")
-        if args.exh:
-            viz_ep_costs.update(ep, exh_cost,
-                    name="LOpt")
+    all_df = pd.DataFrame(all_data)
 
-        viz_ep_costs.update(ep, rl_cost,
-                name="RL")
+    file_name = args.suffix + str(args.query) + args.costModel + ".csv"
+    all_df.to_csv(file_name)
 
-        # if args.lopt:
-            # print("ep {}, real loss: {}, cost_diff: {}, lopt_cost:{}, \
-                    # rl_cost:{}".format(ep, real_loss, lopt_cost-rl_cost, lopt_cost,
-                        # rl_cost))
+    print(all_df.sort("query_template"))
+    print("number of entries without exhaustive stats: ", all_df[all_df.EXHAUSTIVE==0].count().EXHAUSTIVE)
+    # all_df[all_df.EXHAUSTIVE == 0] = all_df.LEFT_DEEP[all_df.EXHAUSTIVE == 0]
 
-    def print_results(arr, name):
-        print("results for ", name)
-        print("avg: ", sum(arr) / len(arr))
-        print("max: ", max(arr))
-        print("std: ", np.std(arr))
-        print("var: ", np.var(arr))
+    # remove 0s
+    df = ((all_df.loc[all_df.EXHAUSTIVE != 0])).drop("query_template",axis=1)
+    df = df.drop("RL Join Order", axis=1)
+    df = df.div(df.EXHAUSTIVE, axis=0)
 
-    print_results(lopt_opts, "lopt")
-    print_results(rl_opts, "rl")
-    print_results(ld_opts, "ld")
-    print("stored exh cost: " , stored_exh_cost)
-    print("no exh cost: ", no_exh)
+    stats=pd.DataFrame()
+    stats["Mean"] = df.mean()
+    stats["Var"] = df.var()
+    stats["Max"]= df.max()
+    stats["Min"]= df.min()
+    print(stats)
 
-    # print(len(lopt_opts), lopt_opts)
-    # print(len(rl_opts), rl_opts)
-    # print(len(ld_opts), ld_opts)
-
-    # print("avg lopt opts: ", sum(lopt_opts) / len(lopt_opts))
-    # print("lopt var: ",
-
-    # print("avg rl opts: ", sum(rl_opts) / len(rl_opts))
-    # print("avg ld opts: ", sum(ld_opts) / len(ld_opts))
-
-
-    print("num good: {}, num bad: {}".format(num_good, num_bad))
+    import pdb
+    pdb.set_trace()
 
 

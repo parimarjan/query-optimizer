@@ -41,6 +41,9 @@ public class ZeroMQServer {
 
   public ArrayList<Integer> curQuerySet;
 
+  // FIXME: get rid of this
+  public ArrayList<Integer> joinOrderSeq = new ArrayList<Integer>();
+
   public ZeroMQServer(int port, boolean verbose) {
     COSTS_FILE_NAME = QueryOptExperiment.getCostModelName() + BASE_COSTS_FILE_NAME;
     this.port = Integer.toString(port);
@@ -109,6 +112,9 @@ public class ZeroMQServer {
     String plannerName;
     switch (msg)
     {
+      case "joinOrderSeq":
+        resp = joinOrderSeq;
+        break;
       case "END":
         if (verbose) System.out.println("got END command");
         END = true;
