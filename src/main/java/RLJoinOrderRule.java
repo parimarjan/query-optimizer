@@ -314,7 +314,7 @@ public class RLJoinOrderRule extends RelOptRule {
       // in the middle of an episode, but for now, we complain here because
       // this should not be happening in training.
       edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
-      System.out.println("actions should be chosen by python agent and not randomly!");
+      //System.out.println("actions should be chosen by python agent and not randomly!");
     } else {
       edgeOrdinal = zmq.nextAction;
     }

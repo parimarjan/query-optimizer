@@ -50,7 +50,6 @@ def test(args, env):
         done = False
         query = env.reset()
         if query in queries_seen:
-            print("repeating query")
             continue
         queries_seen.append(query)
 

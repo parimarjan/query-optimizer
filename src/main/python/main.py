@@ -109,6 +109,8 @@ def read_flags():
                                 default="min_max", help="type of reward normalization")
     parser.add_argument("-costModel", type=str, required=False,
                                 default="rowCount", help="")
+    parser.add_argument("-dataset", type=str, required=False,
+                                default="JOB", help="")
     return parser.parse_args()
 
 def find_cost(planOutput):
@@ -132,13 +134,13 @@ def start_java_server(args):
     JAVA_EXEC_FORMAT = 'mvn -e exec:java -Dexec.mainClass=Main \
     -Dexec.args="-query {query} -port {port} -train {train} -onlyFinalReward \
     {final_reward} -lopt {lopt} -exhaustive {exh} -leftDeep {ld} -python 1 \
-    -verbose {verbose} -costModel {cm} -executeOnDB {execute}"'
+    -verbose {verbose} -costModel {cm} -executeOnDB {execute} -dataset {ds}"'
     # FIXME: setting the java directory relative to the directory we are
     # executing it from?
     cmd = JAVA_EXEC_FORMAT.format(query = args.query, port = str(args.port),
             train=args.train, final_reward=args.only_final_reward, lopt=args.lopt,
             exh=args.exh, ld = args.left_deep, verbose=args.verbose,
-            cm = args.costModel, execute = args.executeOnDB)
+            cm = args.costModel, execute = args.executeOnDB, ds = args.dataset)
     print("cmd is: ", cmd)
     JAVA_PROCESS = sp.Popen(cmd, shell=True)
     print("started java server!")
@@ -381,7 +383,9 @@ def main():
         # env.reset()
         # time.sleep(5)
         # env.socket.close()
-        JAVA_PROCESS.kill()
+        # JAVA_PROCESS.kill()
+        time.sleep(1)
+        os.killpg(os.getpid(), signal.SIGTERM)
         print("killed the java server")
 
     args = read_flags()

@@ -144,6 +144,20 @@ public class QueryOptExperiment {
                     return "";
             }
         }
+
+        public static QUERIES_DATASET getDataset(String ds)
+        {
+          switch (ds) {
+            case "JOB":
+              return JOB;
+            case "SIMPLE":
+              return SIMPLE;
+            default:
+              System.err.println("unsupported dataset");
+              System.exit(-1);
+          }
+          return null;
+        }
     }
 
     public ArrayList<String> allSqlQueries;
@@ -238,8 +252,6 @@ public class QueryOptExperiment {
       while (true) {
         // FIXME: temporary until we get the communication stuff to work
         // properly.
-        System.out.println("num failed queries: " + numFailedQueries);
-        System.out.println("num successful queries: " + numSuccessfulQueries);
         // basically wait for reset every time.
         // FIXME: add a way to make it possible to send end command.
         // pick a random query for this episode
@@ -283,8 +295,6 @@ public class QueryOptExperiment {
           }
         }
       }
-      System.out.println("num failed queries: " + numFailedQueries);
-      System.out.println("num successful queries: " + numSuccessfulQueries);
     }
 
     public static String getCostModelName() {
@@ -331,7 +341,7 @@ public class QueryOptExperiment {
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
-              System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
+              //System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
             }
           }
@@ -380,7 +390,7 @@ public class QueryOptExperiment {
             String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
             if (verbose) System.out.println("optimized cost for " + plannerName + " is: " + optCost);
-            System.out.println("optimized cost for " + plannerName + " is: " + optCost);
+            //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             if (verbose) System.out.println("planning time: " +
                 (System.currentTimeMillis()- start));
             ZeroMQServer zmq = getZMQServer();

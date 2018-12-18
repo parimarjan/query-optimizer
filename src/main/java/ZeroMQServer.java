@@ -123,10 +123,7 @@ public class ZeroMQServer {
         plannerName = new String(request);
         Double totalCost = optimizedCosts.get(query).get(plannerName);
         if (totalCost == null) {
-          // FIXME: this should never happen, but need to figure out a way to
-          // debug this (?)
-          System.out.println("totalCost was null!");
-          //System.exit(-1);
+          // has not been executed ...
           break;
         }
         if (verbose) System.out.println("totalCost was not null!");

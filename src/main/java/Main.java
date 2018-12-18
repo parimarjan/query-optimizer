@@ -26,6 +26,7 @@ class Main {
     options.addOption(newOption("train", "use exhaustive search planner or not"));
     options.addOption(newOption("executeOnDB", "execute on DB or not"));
     options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
+    options.addOption(newOption("dataset", "which dataset to use"));
 
     CommandLineParser parser = new DefaultParser();
     HelpFormatter formatter = new HelpFormatter();
@@ -82,6 +83,11 @@ class Main {
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
     boolean executeOnDB = (Integer.parseInt(cmd.getOptionValue("executeOnDB", "0")) == 1);
     String costModel = cmd.getOptionValue("costModel", "");
+    // FIXME: temporary
+    if (costModel.equals("rowCount")) {
+      costModel = "";
+    }
+    String dataset = cmd.getOptionValue("dataset", "JOB");
 
     // FIXME: helper utility to just print out all the options?
     System.out.println("using zmq port " + port);
@@ -93,6 +99,7 @@ class Main {
     System.out.println("left deep search " + leftDeep);
     System.out.println("costModel " + costModel);
     System.out.println("executeOnDB " + executeOnDB);
+    System.out.println("dataset " + dataset);
 
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     if (exhaustive) {
@@ -111,8 +118,20 @@ class Main {
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.BUSHY);
 
     QueryOptExperiment exp = null;
+    String dbUrl = "jdbc:calcite:model=pg-schema.json";
+    //String dbUrl = "jdbc:calcite:model=monetdb-schema.json";
+
+    //Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+    //try {
+        //String con_url = "jdbc:monetdb://localhost:50000/my-first-db";
+        //Connection con = DriverManager.getConnection(con_url, "monetdb", "monetdb");
+    //} catch (Exception e) {
+      //throw e;
+    //}
+    //System.out.println("succeeded in creating connection with monetDB!!");
+
     try {
-        exp = new QueryOptExperiment("jdbc:calcite:model=pg-schema.json", plannerTypes, QueryOptExperiment.QUERIES_DATASET.JOB, port, onlyFinalReward, verbose, train, costModel, executeOnDB);
+        exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, onlyFinalReward, verbose, train, costModel, executeOnDB);
     } catch (Exception e) {
         System.err.println("Sql Exception!");
         throw e;
