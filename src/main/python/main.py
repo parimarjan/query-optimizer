@@ -384,7 +384,7 @@ def main():
         # time.sleep(5)
         # env.socket.close()
         # JAVA_PROCESS.kill()
-        time.sleep(1)
+        time.sleep(5)
         os.killpg(os.getpid(), signal.SIGTERM)
         print("killed the java server")
 
@@ -403,6 +403,7 @@ def main():
         elif args.test:
             test(args, env)
     except Exception as e:
+        print("exception!")
         print(e)
         cleanup()
     print("after train!")

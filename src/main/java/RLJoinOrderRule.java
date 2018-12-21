@@ -99,51 +99,28 @@ public class RLJoinOrderRule extends RelOptRule {
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
     onlyFinalReward = QueryOptExperiment.onlyFinalReward();
-		// wrapper around RelMetadataQuery, to add support for non linear cost
+    // wrapper around RelMetadataQuery, to add support for non linear cost
     // models.
     final MyMetadataQuery mq = MyMetadataQuery.instance();
 
     final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
-    final List<QueryGraphUtils.Vertex> vertexes = new ArrayList<>();
-    int x = 0;
-    Double scanCost = 0.0;
-    // Sequence of relNodes that are used to build the final optimized relNode
-    // one join at a time.
-    List<Pair<RelNode, TargetMapping>> optRelNodes = new ArrayList<>();
-    QueryGraphUtils qGraphUtils = new QueryGraphUtils(pw);
+    QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
 
-    // Add the orignal tables as vertexes
-    for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
-      final RelNode rel = multiJoin.getJoinFactor(i);
-      // this is a vertex, so must be one of the tables from the database
-      double cost = mq.getRowCount(rel);
-      scanCost += cost;
-      QueryGraphUtils.Vertex newVertex = new QueryGraphUtils.LeafVertex(i, rel, cost, x);
-      vertexes.add(newVertex);
-      qGraphUtils.updateRelNodes(newVertex, optRelNodes, rexBuilder, relBuilder, multiJoin);
-      x += rel.getRowType().getFieldCount();
-    }
-    zmq.scanCost = scanCost;
-    assert x == multiJoin.getNumTotalFields();
-
-    final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
-    for (RexNode node : multiJoin.getJoinFilters()) {
-      unusedEdges.add(multiJoin.createEdge2(node));
-    }
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
     zmq.state = new ArrayList<Integer>(mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures(), multiJoin).toList());
-    final List<LoptMultiJoin2.Edge> usedEdges = new ArrayList<>();
     // only used for finalReward scenario
     Double costSoFar = 0.00;
     Double estCostSoFar = 0.00;
     for (;;) {
       // break condition
       final int[] factors;
-      if (unusedEdges.size() == 0) {
+      if (queryGraph.edges.size() == 0) {
         // No more edges. Are there any un-joined vertexes?
+        /// FIXME: simplify handling this by putting logic in query graph
+        /// TODO: how to handle this with a query graph?
         zmq.episodeDone = 1;
-        final QueryGraphUtils.Vertex lastVertex = Util.last(vertexes);
+        final QueryGraph.Vertex lastVertex = Util.last(queryGraph.allVertexes);
         final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
         if (z < 0) {
           break;
@@ -153,20 +130,16 @@ public class RLJoinOrderRule extends RelOptRule {
         // TODO: make this an externally provided function to choose the next
         // edge.
         zmq.episodeDone = 0;
-        factors = chooseNextEdge(unusedEdges, vertexes, multiJoin);
+        factors = chooseNextEdge(queryGraph);
       }
 
-      double estCost = qGraphUtils.updateGraph(vertexes, factors, usedEdges,
-          unusedEdges, mq, rexBuilder);
+      double estCost = queryGraph.updateGraph(factors);
       estCostSoFar += estCost;
-      qGraphUtils.updateRelNodes(Util.last(vertexes), optRelNodes, rexBuilder, relBuilder, multiJoin);
-      // FIXME: do we need a new relBuilder here?
-      //RelBuilder tmpRelBuilder = call.builder();
-      //RelBuilder tmpRelBuilder = relBuilder;
-      Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(optRelNodes);
-      //tmpRelBuilder.push(curTop.left)
-          //.project(tmpRelBuilder.fields(curTop.right));
-      //RelNode curOptNode = tmpRelBuilder.build();
+      Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(queryGraph.relNodes);
+
+      /// Everything below this remains same
+      // TODO: see how we were handling this in exhaustive search, and if
+      // anything needs to be changed?
       RelNode curOptNode = curTop.left;
       double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
 
@@ -178,7 +151,7 @@ public class RLJoinOrderRule extends RelOptRule {
         // them.
         zmq.lastTrueReward = -cost;
         costSoFar += cost;
-        if (unusedEdges.size() == 0) {
+        if (queryGraph.edges.size() == 0) {
           zmq.lastReward = -costSoFar;
         } else {
           zmq.lastReward = 0.00;
@@ -187,12 +160,9 @@ public class RLJoinOrderRule extends RelOptRule {
       zmq.waitForClientTill("getReward");
     }
 
-    //System.out.println("costSoFar: " + costSoFar);
-    //System.out.println("estCostSoFar: " + estCostSoFar);
-
     /// FIXME: need to understand what this TargetMapping business really is...
     /// just adding a projection on top of the left nodes we had.
-    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(optRelNodes);
+    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(queryGraph.relNodes);
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
@@ -200,29 +170,29 @@ public class RLJoinOrderRule extends RelOptRule {
     call.transformTo(optNode);
   }
 
-  private void trace(List<QueryGraphUtils.Vertex> vertexes,
-      List<LoptMultiJoin2.Edge> unusedEdges, List<LoptMultiJoin2.Edge> usedEdges,
+  // FIXME: should be part of the QueryGraph interface as well.
+  private void trace(List<QueryGraph.Vertex> vertexes,
+      List<QueryGraph.Edge> unusedEdges, List<QueryGraph.Edge> usedEdges,
       int edgeOrdinal, PrintWriter pw)
   {
     pw.println("bestEdge: " + edgeOrdinal);
     pw.println("vertexes:");
-    for (QueryGraphUtils.Vertex vertex : vertexes) {
+    for (QueryGraph.Vertex vertex : vertexes) {
       pw.println(vertex);
     }
     pw.println("unused edges:");
-    for (LoptMultiJoin2.Edge edge : unusedEdges) {
+    for (QueryGraph.Edge edge : unusedEdges) {
       pw.println(edge);
     }
     pw.println("edges:");
-    for (LoptMultiJoin2.Edge edge : usedEdges) {
+    for (QueryGraph.Edge edge : usedEdges) {
       pw.println(edge);
     }
     pw.println();
     pw.flush();
   }
 
-
-  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures(LoptMultiJoin2.Edge edge, List<QueryGraphUtils.Vertex> vertexes, LoptMultiJoin2 mj)
+  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures(QueryGraph.Edge edge, List<QueryGraph.Vertex> vertexes, LoptMultiJoin2 mj)
   {
     boolean onlyJoinConditionAttributes = false;
     ArrayList<Integer> left = null;
@@ -235,19 +205,19 @@ public class RLJoinOrderRule extends RelOptRule {
     ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
 
     for (Integer factor : factors) {
-      QueryGraphUtils.Vertex v = vertexes.get(factor);
+      QueryGraph.Vertex v = vertexes.get(factor);
       ImmutableBitSet.Builder fBuilder = ImmutableBitSet.builder();
       ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
       // all the join conditions for this edge.
       allPossibleFeaturesBuilder.addAll(edge.columns);
       assert v != null;
-      assert v.visibleFeatures != null;
+      assert v.visibleAttrs != null;
       ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
-      ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleFeatures);
+      ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleAttrs);
       // now we have only the features visible in join condition.
       //System.out.println("should only have one visible: " + conditionFeatures);
       fBuilder.addAll(conditionFeatures);
-      fBuilder.addAll(v.visibleFeatures);
+      fBuilder.addAll(v.visibleAttrs);
       ImmutableBitSet features = fBuilder.build();
       //System.out.println("all possible features: " + features);
       features = features.intersect(queryFeatures);
@@ -277,16 +247,19 @@ public class RLJoinOrderRule extends RelOptRule {
    * Passes control to the python agent to choose the next edge.
    * @ret: factors associated with the chosen edge
    */
-  private int [] chooseNextEdge(List<LoptMultiJoin2.Edge> unusedEdges,
-      List<QueryGraphUtils.Vertex> vertexes, LoptMultiJoin2 multiJoin)
+  private int [] chooseNextEdge(QueryGraph queryGraph)
   {
+    List<QueryGraph.Edge> unusedEdges = queryGraph.edges;
+    List<QueryGraph.Vertex> vertexes = queryGraph.allVertexes;
+    LoptMultiJoin2 multiJoin = queryGraph.multiJoin;
+
     final int[] factors;
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // each edge is equivalent to a possible action, and must be represented
     // by its features
     final int edgeOrdinal;
     ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
-    for (LoptMultiJoin2.Edge edge : unusedEdges) {
+    for (QueryGraph.Edge edge : unusedEdges) {
       Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures(edge, vertexes, multiJoin);
       actionFeatures.add(features);
     }
@@ -304,7 +277,7 @@ public class RLJoinOrderRule extends RelOptRule {
     joinOrderSeq.add(edgeOrdinal);
     zmq.joinOrderSeq = joinOrderSeq;
     //System.out.println("edgeOrdinal chosen: " + edgeOrdinal);
-    final LoptMultiJoin2.Edge bestEdge = unusedEdges.get(edgeOrdinal);
+    final QueryGraph.Edge bestEdge = unusedEdges.get(edgeOrdinal);
 
     // For now, assume that the edge is between precisely two factors.
     // 1-factor conditions have probably been pushed down,
@@ -314,26 +287,6 @@ public class RLJoinOrderRule extends RelOptRule {
     assert bestEdge.factors.cardinality() == 2;
     factors = bestEdge.factors.toArray();
     return factors;
-  }
-
-  private void collapseEdges()
-  {
-    // FIXME: finish attempt to collapse common edges.
-    //final List<RexNode> conditions = new ArrayList<>();
-    //final Iterator<LoptMultiJoin2.Edge> edgeIterator1 = unusedEdges.iterator();
-    //final Iterator<LoptMultiJoin2.Edge> edgeIterator2 = unusedEdges.iterator();
-    //final List<LoptMultiJoin2.Edge> unusedEdges2 = new ArrayList<>();
-    //while (edgeIterator1.hasNext()) {
-      //LoptMultiJoin2.Edge edge = edgeIterator1.next();
-      //ImmutableBitSet edgeFactors = edge.factors;
-      //while (edgeIterator2.hasNext()) {
-        //LoptMultiJoin2.Edge edge2 = edgeIterator2.next();
-        //if (edge.toString().equals(edge2.toString())) continue;
-        //if (!edgeFactors.contains(edge2.factors)) continue;
-        //// time to collapse the edges!
-      //}
-    //}
-    //System.out.println("size of unusedEdges: " + unusedEdges.size());
   }
 }
 

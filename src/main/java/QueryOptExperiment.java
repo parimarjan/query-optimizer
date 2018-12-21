@@ -280,8 +280,8 @@ public class QueryOptExperiment {
               numFailedQueries += 1;
             }
             System.out.println("failed in planAndExecute for " + plannerName + " for query number " + nextQuery);
-            //System.out.println(e);
-            //e.printStackTrace();
+            System.out.println(e);
+            e.printStackTrace();
             //zmq.optimizedCosts.get(query).put(plannerName, 0.00);
             //throw e;
           }

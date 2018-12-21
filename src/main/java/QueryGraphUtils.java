@@ -129,6 +129,8 @@ public class QueryGraphUtils {
    * removed.
    * @ret: the cost of the edge collapse.
    */
+  // Changes: adds a vertex, and removes an edge.
+  //
   public double updateGraph(List<Vertex> vertexes, int [] factors, List<LoptMultiJoin2.Edge> usedEdges, List<LoptMultiJoin2.Edge> unusedEdges, MyMetadataQuery mq, RexBuilder rexBuilder)
   {
     // FIXME: this control should be given to the RL agent.
@@ -147,8 +149,7 @@ public class QueryGraphUtils {
     // set v ensures that the new vertex we are creating will be added to the
     // factors of the new vertex.
     final int v = vertexes.size();
-    final ImmutableBitSet newFactors =
-        majorVertex.factors
+    final ImmutableBitSet newFactors = majorVertex.factors
             .rebuild()
             .addAll(minorVertex.factors)
             .set(v)
