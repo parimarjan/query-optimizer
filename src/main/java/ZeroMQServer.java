@@ -6,6 +6,10 @@ import java.io.IOException;
 import java.io.*;
 import java.util.*;
 
+import com.google.gson.Gson;
+//import com.google.gson.GsonBuilder;
+
+
 // FIXME: generalize this enough to handle different feature / state
 // representations.
 
@@ -16,6 +20,9 @@ public class ZeroMQServer {
   private ZMQ.Context context;
   private ZMQ.Socket responder;
   private String port;
+
+  // FIXME: add reset option for internal state.
+  public QueryGraph queryGraph = null;
 
   // Internal state for the query planning environment. Here, I just assume
   // that everything is very serial, so the states should be appropriately
@@ -99,7 +106,7 @@ public class ZeroMQServer {
   }
 
   // returns the command string sent by the client.
-  public String waitForCommand() throws Exception {
+  public String waitForCommand() {
     // FIXME: is it bad to reset the connection every time?
     // restart();
     String msg;
@@ -112,6 +119,16 @@ public class ZeroMQServer {
     String plannerName;
     switch (msg)
     {
+      // park API based commands
+      case "getQueryGraph":
+        // First send the vertexes, then the edges
+        resp = queryGraph.allVertexes;
+        responder.send(resp.toString());
+        // just wait for an ack.
+        request = responder.recv(0);
+        resp = queryGraph.edges;
+        break;
+      // Old ones
       case "joinOrderSeq":
         resp = joinOrderSeq;
         break;
@@ -157,7 +174,6 @@ public class ZeroMQServer {
       case "reset":
         episodeNum = 0;
         reset = true;
-        // don't need to send any reply here.
         resp = query;
         break;
       case "getActions":
@@ -171,11 +187,17 @@ public class ZeroMQServer {
         break;
       case "step":
         // here we might need to do a bunch of things to get all the feedback.
-        resp = "";
-        responder.send(resp.toString());
-        request = responder.recv(0);
-        String action = new String(request);
-        nextAction = Integer.parseInt(action);
+        try {
+          resp = "";
+          responder.send(resp.toString());
+          request = responder.recv(0);
+          String action = new String(request);
+          nextAction = Integer.parseInt(action);
+          System.out.println("nextAction is: " + nextAction);
+        } catch (Exception e) {
+          System.out.println("caught exception in step");
+          e.printStackTrace();
+        }
         break;
       case "getReward":
         resp = lastReward;
@@ -187,7 +209,6 @@ public class ZeroMQServer {
         resp = episodeDone;
         break;
       default:
-        //close();
         return msg;
     }
 

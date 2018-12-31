@@ -23,11 +23,7 @@ import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mappings;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import static org.apache.calcite.util.mapping.Mappings.TargetMapping;
 
 // new ones
@@ -57,21 +53,37 @@ public class QueryGraph {
   List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
 
   // FIXME: maybe we can build this independently of this?
-  // FIXME: make private
-  public LoptMultiJoin2 multiJoin;
+  private LoptMultiJoin multiJoin;
   private RexBuilder rexBuilder;
   private RelBuilder relBuilder;
   private MyMetadataQuery mq;
   private PrintWriter pw = null;
+  private HashMap<Integer, Integer> mapToDatabase;
 
   /* TODO:
    */
-  public QueryGraph(LoptMultiJoin2 multiJoin, MyMetadataQuery mq, RexBuilder rexBuilder, RelBuilder relBuilder)
+  public QueryGraph(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder rexBuilder, RelBuilder relBuilder)
   {
     this.multiJoin = multiJoin;
     this.rexBuilder = rexBuilder;
     this.relBuilder = relBuilder;
     this.mq = mq;
+
+    // set up the mapping to database offsets for each of our attributes
+    HashMap<String, Integer> tableOffsets = DbInfo.getAllTableFeaturesOffsets();
+    mapToDatabase = new HashMap<Integer, Integer>();
+    int totalFieldCount = 0;
+    for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
+      RelNode rel = multiJoin.getJoinFactor(i);
+      String tableName = MyUtils.getTableName(rel);
+      Integer offset = tableOffsets.get(tableName);
+      assert offset != null;
+      int curFieldCount = rel.getRowType().getFieldCount();
+      for (int j = 0; j < curFieldCount; j++) {
+        mapToDatabase.put(j+totalFieldCount, offset+j);
+      }
+      totalFieldCount += curFieldCount;
+    }
 
     allVertexes = new ArrayList<Vertex>();
     edges = new ArrayList<Edge>();
@@ -94,6 +106,7 @@ public class QueryGraph {
     }
   }
 
+  // FIXME: should not need to be static, stop using this class outside.
   /** Participant in a join (relation or join). */
   public static abstract class Vertex
   {
@@ -113,7 +126,7 @@ public class QueryGraph {
     }
   }
 
-  public static class LeafVertex extends Vertex
+  public class LeafVertex extends Vertex
   {
     public final RelNode rel;
     final int fieldOffset;
@@ -131,16 +144,18 @@ public class QueryGraph {
         visibleAttrsBuilder.set(i);
       }
       visibleAttrs = visibleAttrsBuilder.build();
+      // right now, we have all possible attributes turned on
+      visibleAttrs = getVisibleAttributes(visibleAttrs);
     }
 
     @Override public String toString()
     {
-      return "LeafVertex(id: " + id
-        + ", cost: " + Util.human(cost)
-        + ", factors: " + factors
-        + ", fieldOffset: " + fieldOffset
-        + ", visibleAttrs: " + visibleAttrs
-        + ")";
+      return
+        "{'id': " + id
+        + ", 'estimated_cardinality': " + cost
+        + ", 'factors': " + factors
+        + ", 'visibleAttributes': " + visibleAttrs
+        + "}";
     }
   }
 
@@ -163,18 +178,18 @@ public class QueryGraph {
 
     @Override
     public String toString() {
-      return "JoinVertex(id: " + id
-        + ", cost: " + Util.human(cost)
-        + ", factors: " + factors
-        + ", leftFactor: " + leftFactor
-        + ", rightFactor: " + rightFactor
-        + ", visibleAttrs: " + visibleAttrs
-        + ")";
+      return "{'id': " + id
+        + ", 'cost': " + Util.human(cost)
+        + ", 'factors': " + factors
+        + ", 'leftFactor': " + leftFactor
+        + ", 'rightFactor': " + rightFactor
+        + ", 'visibleAttributes': " + visibleAttrs
+        + "}";
     }
   }
 
   /** Information about a join-condition. */
-  public static class Edge
+  public class Edge
   {
     public ImmutableBitSet factors;
     public ImmutableBitSet columns;
@@ -185,7 +200,10 @@ public class QueryGraph {
     {
       this.condition = condition;
       this.factors = factors;
-      this.columns = columns;
+      // columns is not shifted wrt to the database yet, so let us do that.
+      // FIXME: do we need to check if columns order matches the order of
+      // factors?
+      this.columns = mapToQueryFeatures(columns);
     }
 
     // FIXME: verify everything works as expected.
@@ -207,10 +225,37 @@ public class QueryGraph {
     @Override
     public String toString()
     {
-    return "Edge(condition: " + condition
-      + ", factors: " + factors
-      + ", columns: " + columns + ")";
+      return "{'factors': " +  factors
+        + ", 'joinAttributes':" + columns
+        + "}";
     }
+  }
+
+  /// FIXME: can we make this private?
+  public ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs)
+  {
+    ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
+    for (Integer i : bs) {
+      featuresBuilder.set(mapToDatabase.get(i));
+    }
+    return featuresBuilder.build();
+  }
+
+  /**
+   * @allPossibleAttributes: bitset with all the attribute positions
+   * corresponding to the node turned on. This is wrt only to the tables in the
+   * current query.
+   *
+   * ret: bitset with all the attribute positions turned on that are USED in
+   * this query, and with respect to ALL the tables in the dataset.
+   */
+  private ImmutableBitSet getVisibleAttributes(ImmutableBitSet
+      allPossibleAttributes)
+  {
+    ImmutableBitSet queryAttributes = DbInfo.getCurrentQueryVisibleFeatures();
+    ImmutableBitSet retAttributes = allPossibleAttributes.intersect(queryAttributes);
+    retAttributes = mapToQueryFeatures(retAttributes);
+    return retAttributes;
   }
 
   /*
@@ -262,7 +307,6 @@ public class QueryGraph {
       if (newFactors.contains(edge.factors)) {
         conditions.add(edge.condition);
         edgeIterator.remove();
-        //usedEdges.add(edge);
       }
     }
 
@@ -275,6 +319,9 @@ public class QueryGraph {
     final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
         newFactors, cost, ImmutableList.copyOf(conditions), newFeatures);
     allVertexes.add(newVertex);
+    allVertexes.set(majorFactor, null);
+    allVertexes.set(minorFactor, null);
+
     final ImmutableBitSet merged = ImmutableBitSet.of(minorFactor,
         majorFactor);
 

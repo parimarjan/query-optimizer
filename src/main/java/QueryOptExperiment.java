@@ -250,15 +250,6 @@ public class QueryOptExperiment {
       zmq.waitForClientTill("getAttrCount");
       int nextQuery = -1;
       while (true) {
-        // FIXME: temporary until we get the communication stuff to work
-        // properly.
-        // basically wait for reset every time.
-        // FIXME: add a way to make it possible to send end command.
-        // pick a random query for this episode
-        // FIXME: reasoning here gets somewhat convoluted. Simplify it. Right now, very important to do this BEFORE selecting the next query, or else we might give stale info to python client causing deadlock.
-        zmq.waitForClientTill("reset");
-        if (zmq.END) break;
-        zmq.reset = false;
         if (train ) {
           nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
         } else {
@@ -267,6 +258,10 @@ public class QueryOptExperiment {
         if (verbose) System.out.println("nextQuery is: " + nextQuery);
         String query = allSqlQueries.get(queries.get(nextQuery));
         zmq.query = query;
+
+        zmq.waitForClientTill("reset");
+        if (zmq.END) break;
+        zmq.reset = false;
         for (int i = 0; i < volcanoPlanners.size(); i++) {
           try {
             boolean success = planAndExecuteQuery(query, i);
@@ -382,7 +377,6 @@ public class QueryOptExperiment {
         try {
             // FIXME: check if this might actually be working now.
             //tryHepPlanner(node, traitSet, mq);
-
             // using the default volcano planner.
             long start = System.currentTimeMillis();
             RelNode optimizedNode = planner.transform(0, traitSet,

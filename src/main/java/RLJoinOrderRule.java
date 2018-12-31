@@ -102,13 +102,13 @@ public class RLJoinOrderRule extends RelOptRule {
     // wrapper around RelMetadataQuery, to add support for non linear cost
     // models.
     final MyMetadataQuery mq = MyMetadataQuery.instance();
-
-    final LoptMultiJoin2 multiJoin = new LoptMultiJoin2(multiJoinRel);
+    final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
+    zmq.queryGraph = queryGraph;
 
     // In general, we can keep updating it after every edge collapse, although
     // it shouldn't change for the way DQ featurized.
-    zmq.state = new ArrayList<Integer>(mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures(), multiJoin).toList());
+    zmq.state = new ArrayList<Integer>(queryGraph.mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures()).toList());
     // only used for finalReward scenario
     Double costSoFar = 0.00;
     Double estCostSoFar = 0.00;
@@ -166,7 +166,6 @@ public class RLJoinOrderRule extends RelOptRule {
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
-    //System.out.println("RL optNode cost: " + mq.getCumulativeCost(optNode));
     call.transformTo(optNode);
   }
 
@@ -192,57 +191,6 @@ public class RLJoinOrderRule extends RelOptRule {
     pw.flush();
   }
 
-  private Pair<ArrayList<Integer>, ArrayList<Integer>> getDQFeatures(QueryGraph.Edge edge, List<QueryGraph.Vertex> vertexes, LoptMultiJoin2 mj)
-  {
-    boolean onlyJoinConditionAttributes = false;
-    ArrayList<Integer> left = null;
-    ArrayList<Integer> right = null;
-
-    Pair<ArrayList<Integer>, ArrayList<Integer>> pair;
-    List<Integer> factors = edge.factors.toList();
-
-    // intersect this with the features present in the complete query.
-    ImmutableBitSet queryFeatures = DbInfo.getCurrentQueryVisibleFeatures();
-
-    for (Integer factor : factors) {
-      QueryGraph.Vertex v = vertexes.get(factor);
-      ImmutableBitSet.Builder fBuilder = ImmutableBitSet.builder();
-      ImmutableBitSet.Builder allPossibleFeaturesBuilder = ImmutableBitSet.builder();
-      // all the join conditions for this edge.
-      allPossibleFeaturesBuilder.addAll(edge.columns);
-      assert v != null;
-      assert v.visibleAttrs != null;
-      ImmutableBitSet allPossibleFeatures = allPossibleFeaturesBuilder.build();
-      ImmutableBitSet conditionFeatures = allPossibleFeatures.intersect(v.visibleAttrs);
-      // now we have only the features visible in join condition.
-      //System.out.println("should only have one visible: " + conditionFeatures);
-      fBuilder.addAll(conditionFeatures);
-      fBuilder.addAll(v.visibleAttrs);
-      ImmutableBitSet features = fBuilder.build();
-      //System.out.println("all possible features: " + features);
-      features = features.intersect(queryFeatures);
-      //System.out.println("exact features: " + features);
-      features = mapToQueryFeatures(features, mj);
-      //System.out.println("mapped features: " + features);
-      // both start of as null. Assume first guy is the left one.
-      if (left == null) {
-        left = new ArrayList<Integer>(features.toList());
-      } else {
-        right = new ArrayList<Integer>(features.toList());
-      }
-    }
-    return new Pair<ArrayList<Integer>, ArrayList<Integer>>(left, right);
-  }
-
-  private ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs, LoptMultiJoin2 mj)
-  {
-    ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
-    for (Integer i : bs) {
-      featuresBuilder.set(mj.mapToDatabase.get(i));
-    }
-    return featuresBuilder.build();
-  }
-
   /*
    * Passes control to the python agent to choose the next edge.
    * @ret: factors associated with the chosen edge
@@ -250,40 +198,26 @@ public class RLJoinOrderRule extends RelOptRule {
   private int [] chooseNextEdge(QueryGraph queryGraph)
   {
     List<QueryGraph.Edge> unusedEdges = queryGraph.edges;
-    List<QueryGraph.Vertex> vertexes = queryGraph.allVertexes;
-    LoptMultiJoin2 multiJoin = queryGraph.multiJoin;
 
     final int[] factors;
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
     // each edge is equivalent to a possible action, and must be represented
     // by its features
     final int edgeOrdinal;
-    ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>> actionFeatures = new ArrayList<Pair<ArrayList<Integer>, ArrayList<Integer>>>();
-    for (QueryGraph.Edge edge : unusedEdges) {
-      Pair<ArrayList<Integer>, ArrayList<Integer>> features = getDQFeatures(edge, vertexes, multiJoin);
-      actionFeatures.add(features);
-    }
-    zmq.actions = actionFeatures;
     zmq.waitForClientTill("step");
     if (zmq.reset) {
-      // Technically, we should allow this situation -- reset being called
-      // in the middle of an episode, but for now, we complain here because
-      // this should not be happening in training.
+      // TODO: put this option in QueryGraph.
       edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
-      //System.out.println("actions should be chosen by python agent and not randomly!");
     } else {
       edgeOrdinal = zmq.nextAction;
     }
     joinOrderSeq.add(edgeOrdinal);
     zmq.joinOrderSeq = joinOrderSeq;
-    //System.out.println("edgeOrdinal chosen: " + edgeOrdinal);
     final QueryGraph.Edge bestEdge = unusedEdges.get(edgeOrdinal);
 
     // For now, assume that the edge is between precisely two factors.
     // 1-factor conditions have probably been pushed down,
-    // and 3-or-more-factor conditions are advanced. (TODO:)
-    // Therefore, for now, the factors that are merged are exactly the
-    // factors on this edge.
+    // and 3-or-more-factor conditions are advanced.
     assert bestEdge.factors.cardinality() == 2;
     factors = bestEdge.factors.toArray();
     return factors;
