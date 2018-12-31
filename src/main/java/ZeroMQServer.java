@@ -124,7 +124,7 @@ public class ZeroMQServer {
         // First send the vertexes, then the edges
         resp = queryGraph.allVertexes;
         responder.send(resp.toString());
-        // just wait for an ack.
+        // just wait for an ack, and then send edges
         request = responder.recv(0);
         resp = queryGraph.edges;
         break;

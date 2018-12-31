@@ -200,10 +200,9 @@ public class QueryGraph {
     {
       this.condition = condition;
       this.factors = factors;
-      // columns is not shifted wrt to the database yet, so let us do that.
       // FIXME: do we need to check if columns order matches the order of
       // factors?
-      this.columns = mapToQueryFeatures(columns);
+      this.columns = columns;
     }
 
     // FIXME: verify everything works as expected.
@@ -232,7 +231,7 @@ public class QueryGraph {
   }
 
   /// FIXME: can we make this private?
-  public ImmutableBitSet mapToQueryFeatures(ImmutableBitSet bs)
+  public ImmutableBitSet mapToDBFeatures(ImmutableBitSet bs)
   {
     ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
     for (Integer i : bs) {
@@ -254,7 +253,7 @@ public class QueryGraph {
   {
     ImmutableBitSet queryAttributes = DbInfo.getCurrentQueryVisibleFeatures();
     ImmutableBitSet retAttributes = allPossibleAttributes.intersect(queryAttributes);
-    retAttributes = mapToQueryFeatures(retAttributes);
+    retAttributes = mapToDBFeatures(retAttributes);
     return retAttributes;
   }
 
@@ -402,6 +401,9 @@ public class QueryGraph {
   {
     ImmutableBitSet fieldRefBitmap = fieldBitmap(condition);
     ImmutableBitSet factorRefBitmap = factorBitmap(fieldRefBitmap);
+    // this is the first time that the edge has been created, so we map it's
+    // fields to be wrt to the full DB rather than just the current query
+    fieldRefBitmap = mapToDBFeatures(fieldRefBitmap);
     return new Edge(condition, factorRefBitmap, fieldRefBitmap);
   }
 

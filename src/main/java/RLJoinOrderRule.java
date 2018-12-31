@@ -106,9 +106,6 @@ public class RLJoinOrderRule extends RelOptRule {
     QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
     zmq.queryGraph = queryGraph;
 
-    // In general, we can keep updating it after every edge collapse, although
-    // it shouldn't change for the way DQ featurized.
-    zmq.state = new ArrayList<Integer>(queryGraph.mapToQueryFeatures(DbInfo.getCurrentQueryVisibleFeatures()).toList());
     // only used for finalReward scenario
     Double costSoFar = 0.00;
     Double estCostSoFar = 0.00;
