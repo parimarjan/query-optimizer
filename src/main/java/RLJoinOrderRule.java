@@ -108,7 +108,6 @@ public class RLJoinOrderRule extends RelOptRule {
 
     // only used for finalReward scenario
     Double costSoFar = 0.00;
-    Double estCostSoFar = 0.00;
     for (;;) {
       // break condition
       final int[] factors;
@@ -130,15 +129,7 @@ public class RLJoinOrderRule extends RelOptRule {
         factors = chooseNextEdge(queryGraph);
       }
 
-      double estCost = queryGraph.updateGraph(factors);
-      estCostSoFar += estCost;
-      Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(queryGraph.relNodes);
-
-      /// Everything below this remains same
-      // TODO: see how we were handling this in exhaustive search, and if
-      // anything needs to be changed?
-      RelNode curOptNode = curTop.left;
-      double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
+      double cost = queryGraph.updateGraph(factors);
 
       if (!onlyFinalReward) {
         costSoFar += cost;

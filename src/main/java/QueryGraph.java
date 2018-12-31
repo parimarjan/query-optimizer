@@ -92,8 +92,8 @@ public class QueryGraph {
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
-      double cost = mq.getRowCount(rel);
-      Vertex newVertex = new LeafVertex(i, rel, cost, x);
+      double rowCount = mq.getRowCount(rel);
+      Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
       allVertexes.add(newVertex);
       // TODO: support this?
       updateRelNodes(newVertex);
@@ -104,6 +104,36 @@ public class QueryGraph {
     for (RexNode node : multiJoin.getJoinFilters()) {
       edges.add(createEdge(node));
     }
+
+    // TODO: maybe use this version?
+    //final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
+    //for (RexNode node : multiJoin.getJoinFilters()) {
+      //LoptMultiJoin2.Edge edge = multiJoin.createEdge2(node);
+      //boolean newEdge = true;
+      //for (LoptMultiJoin2.Edge edge2 : unusedEdges) {
+        //if (edge2.factors.contains(edge.factors)) {
+          ////System.out.println("!!going to merge an edge!!");
+          //newEdge = false;
+          //// combine these edges
+          //edge2.mergeEdge(edge, rexBuilder);
+          //break;
+        //}
+      //}
+      //if (newEdge) edges.add(edge);
+    //}
+  }
+
+  // FIXME: how do we maintain relBuilder's state?
+  public QueryGraph(QueryGraph oldQG)
+  {
+    this.multiJoin = oldQG.multiJoin;
+    this.rexBuilder = oldQG.rexBuilder;
+    this.relBuilder = oldQG.relBuilder;
+    //this.mq = mq;
+    //this.allVertexes =
+    //this.edges =
+    //this.relNodes =
+
   }
 
   // FIXME: should not need to be static, stop using this class outside.
@@ -179,7 +209,7 @@ public class QueryGraph {
     @Override
     public String toString() {
       return "{'id': " + id
-        + ", 'cost': " + Util.human(cost)
+        + ", 'estimate_cardinality': " + Util.human(cost)
         + ", 'factors': " + factors
         + ", 'leftFactor': " + leftFactor
         + ", 'rightFactor': " + rightFactor
@@ -235,6 +265,10 @@ public class QueryGraph {
   {
     ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
     for (Integer i : bs) {
+      Integer test = mapToDatabase.get(i);
+      if (test == null) {
+        System.out.println("test was null!!!");
+      }
       featuresBuilder.set(mapToDatabase.get(i));
     }
     return featuresBuilder.build();
@@ -252,6 +286,7 @@ public class QueryGraph {
       allPossibleAttributes)
   {
     ImmutableBitSet queryAttributes = DbInfo.getCurrentQueryVisibleFeatures();
+    System.out.println("queryAttributes: " + queryAttributes);
     ImmutableBitSet retAttributes = allPossibleAttributes.intersect(queryAttributes);
     retAttributes = mapToDBFeatures(retAttributes);
     return retAttributes;
@@ -263,10 +298,9 @@ public class QueryGraph {
    * in the graph to reflect the new edges, and add a cost estimate for the new
    * vertex. This will be added to vertexes, but the old vertices will NOT be
    * removed.
-   * @ret: the cost of the edge collapse.
+   * @ret: the cost of choosing this edge for the next join, as computed by the
+   * metadataQueryProvider.
    */
-  // Changes: adds a vertex, and removes an edge.
-  //
   public double updateGraph(int [] factors)
   {
     // FIXME: this control should be given to the RL agent.
@@ -309,14 +343,14 @@ public class QueryGraph {
       }
     }
 
-    double cost =
+    double rowCount =
         majorVertex.cost
         * minorVertex.cost
         * RelMdUtil.guessSelectivity(
             RexUtil.composeConjunction(rexBuilder, conditions, false));
 
     final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
-        newFactors, cost, ImmutableList.copyOf(conditions), newFeatures);
+        newFactors, rowCount, ImmutableList.copyOf(conditions), newFeatures);
     allVertexes.add(newVertex);
     allVertexes.set(majorFactor, null);
     allVertexes.set(minorFactor, null);
@@ -338,12 +372,17 @@ public class QueryGraph {
         edges.set(i, newEdge);
       }
     }
+    // we update the relNodes right away so we can use those to compute the
+    // cost using our cost model
     updateRelNodes(newVertex);
+    // use the last relNode that we just added
+    Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(relNodes);
+    RelNode curOptNode = curTop.left;
+    double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
     return cost;
   }
 
   /* Updates the list of relNodes that correspond to each join order selection.
-   * TODO: maybe we can simplify this?
    */
   private void updateRelNodes(Vertex vertex)
   {
