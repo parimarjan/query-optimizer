@@ -49,6 +49,8 @@ public class QueryGraph {
   // get the current graph, just traverse the edges and add the appropriate
   // vertices
   public ArrayList<Edge> edges;
+	// cumulative cost of the joins we have done so far in the QueryGraph.
+	public Double costSoFar;
   // used to get the RelNode corresponding to the joins we have done so far.
   List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
 
@@ -62,8 +64,12 @@ public class QueryGraph {
 
   /* TODO:
    */
+	// FIXME: do we really need to use LoptMultiJoin? seems to have too many
+	// unneccesary things. Perhaps we can just use MultiJoin / or have our own
+	// class to represent the relevant fields?
   public QueryGraph(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder rexBuilder, RelBuilder relBuilder)
   {
+		this.costSoFar = 0.00;
     this.multiJoin = multiJoin;
     this.rexBuilder = rexBuilder;
     this.relBuilder = relBuilder;
@@ -118,19 +124,20 @@ public class QueryGraph {
       //if (newEdge) edges.add(edge);
     //}
   }
-
-  // FIXME: how do we maintain relBuilder's state?
-  public QueryGraph(QueryGraph oldQG)
-  {
-    this.multiJoin = oldQG.multiJoin;
-    this.rexBuilder = oldQG.rexBuilder;
-    this.relBuilder = oldQG.relBuilder;
-    //this.mq = mq;
-    //this.allVertexes =
-    //this.edges =
-    //this.relNodes =
-
-  }
+	
+	/*
+	 */
+	// FIXME: this can not be called multiple times as it changes the state of
+	// the relBuilder. But would be nice if we could call it multiple times.
+	// Potentially, all we need to do is to undo the final changes we made to the
+	// relBuilder (?)
+	public RelNode getFinalOptimalRelNode() {
+		final Pair<RelNode, Mappings.TargetMapping> top = Util.last(relNodes);
+		relBuilder.push(top.left)
+				.project(relBuilder.fields(top.right));
+		RelNode optNode = relBuilder.build();
+		return optNode;
+	}
 
   // FIXME: should not need to be static, stop using this class outside.
   /** Participant in a join (relation or join). */
@@ -338,6 +345,7 @@ public class QueryGraph {
       }
     }
 
+		// FIXME: these variables need to be renamed to estRowCount
     double rowCount =
         majorVertex.cost
         * minorVertex.cost
@@ -374,6 +382,7 @@ public class QueryGraph {
     Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(relNodes);
     RelNode curOptNode = curTop.left;
     double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
+		this.costSoFar += cost;
     return cost;
   }
 
