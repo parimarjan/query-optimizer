@@ -193,9 +193,7 @@ public class ZeroMQServer {
           request = responder.recv(0);
           String action = new String(request);
           nextAction = Integer.parseInt(action);
-          System.out.println("nextAction is: " + nextAction);
         } catch (Exception e) {
-          System.out.println("caught exception in step");
           e.printStackTrace();
         }
         break;

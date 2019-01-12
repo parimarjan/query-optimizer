@@ -83,7 +83,6 @@ class QueryOptEnv():
     def get_optimized_costs(self, name):
         self.send(b"getJoinsCost")
         resp = float(self.send(name))
-        # assert resp != 0, "sanity check"
         return resp
 
     def get_num_input_features(self):

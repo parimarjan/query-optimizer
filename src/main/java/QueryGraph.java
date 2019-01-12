@@ -88,18 +88,14 @@ public class QueryGraph {
     allVertexes = new ArrayList<Vertex>();
     edges = new ArrayList<Edge>();
     // Add the orignal tables as vertexes
-    int x = 0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       double rowCount = mq.getRowCount(rel);
       Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
       allVertexes.add(newVertex);
-      // TODO: support this?
       updateRelNodes(newVertex);
-      x += rel.getRowType().getFieldCount();
     }
-    assert x == multiJoin.getNumTotalFields();
     // add the Edges
     for (RexNode node : multiJoin.getJoinFilters()) {
       edges.add(createEdge(node));
@@ -209,7 +205,7 @@ public class QueryGraph {
     @Override
     public String toString() {
       return "{'id': " + id
-        + ", 'estimate_cardinality': " + Util.human(cost)
+        + ", 'estimated_cardinality': " + cost
         + ", 'factors': " + factors
         + ", 'leftFactor': " + leftFactor
         + ", 'rightFactor': " + rightFactor
@@ -286,7 +282,6 @@ public class QueryGraph {
       allPossibleAttributes)
   {
     ImmutableBitSet queryAttributes = DbInfo.getCurrentQueryVisibleFeatures();
-    System.out.println("queryAttributes: " + queryAttributes);
     ImmutableBitSet retAttributes = allPossibleAttributes.intersect(queryAttributes);
     retAttributes = mapToDBFeatures(retAttributes);
     return retAttributes;
