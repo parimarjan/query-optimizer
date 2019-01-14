@@ -68,7 +68,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 	// memoized ordering for the given set of factors. We can use these to
 	// reconstruct the QueryGraph with a sequence of updateGraph steps for each
 	// of the edge
-  private HashMap<Set<Integer>, ArrayList<ImmutableBitSet>> memoizedBestJoins;
+  private HashMap<Set<Integer>, ArrayList<Integer>> memoizedBestJoins;
 
   /** Creates an LeftDeepJoinOrderRule. */
   public LeftDeepJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -107,6 +107,10 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 			 // no edges have been chosen yet, so we add an empty list
 			 memoizedBestJoins.put(factor, new ArrayList<Integer>());
     }
+    ArrayList<Integer> initialVertexIdxs = new ArrayList<Integer>();
+    for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
+      initialVertexIdxs.add(i);
+    }
 
     // optimization: consider ab = ba.
 		for (int k = 2; k < multiJoin.getNumJoinFactors()+1; k++) {
@@ -137,9 +141,9 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 					// shared among multiple queryGraphs
 					QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
 					for (Integer edge : optimalMemoizedEdges) {
-						qq.updateGraph(qg.edges.get(edge).factors.toArray());
+						qg.updateGraph(qg.edges.get(edge).factors.toArray());
 					}
-					double curCost = queryGraph.costSoFar;
+					double curCost = qg.costSoFar;
 					// try to do the join represented by optimalMemoizedEdges AND the factor r.
 					// Can only do this join if there is an edge connecting r with one of
 					// the elements in S_i. This must be one of the unusedEdges.
@@ -165,7 +169,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 					// added to curVertexes represents the best joined vertex so far
 					// (...)
 					Integer bestEdge = null;
-					for (int edgeOrd = 0; edgeOrd < qq.edges.size(); edgeOrd+=1) {
+					for (int edgeOrd = 0; edgeOrd < qg.edges.size(); edgeOrd+=1) {
 						// FIXME: do we need curEdge?
 						QueryGraph.Edge curEdge = qg.edges.get(edgeOrd);
 						if (curEdge.factors.equals(neededFactors)) {
@@ -178,7 +182,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 						continue;
 					}
 
-					int [] factors = qq.edges.get(bestEdge).factors.toArray();
+					int [] factors = qg.edges.get(bestEdge).factors.toArray();
 					curCost += qg.updateGraph(factors);
 					if (curCost < minCost) {
 						minCost = curCost;
@@ -197,8 +201,8 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 		QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
 		Set<Integer> allFactors = new HashSet<Integer>(initialVertexIdxs);
 		ArrayList<Integer> bestEdges = memoizedBestJoins.get(allFactors);
-		for (Integer edge : optimalMemoizedEdges) {
-			qq.updateGraph(qg.edges.get(edge).factors.toArray());
+		for (Integer edge : bestEdges) {
+			qg.updateGraph(qg.edges.get(edge).factors.toArray());
 		}
 		RelNode optNode = qg.getFinalOptimalRelNode();
 		call.transformTo(optNode);

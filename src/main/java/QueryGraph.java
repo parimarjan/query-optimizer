@@ -94,6 +94,7 @@ public class QueryGraph {
     allVertexes = new ArrayList<Vertex>();
     edges = new ArrayList<Edge>();
     // Add the orignal tables as vertexes
+    int x = 0;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
@@ -101,6 +102,7 @@ public class QueryGraph {
       Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
       allVertexes.add(newVertex);
       updateRelNodes(newVertex);
+      x += rel.getRowType().getFieldCount();
     }
     // add the Edges
     for (RexNode node : multiJoin.getJoinFilters()) {
