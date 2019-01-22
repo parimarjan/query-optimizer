@@ -68,10 +68,11 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   private int numAdded = 0;
   // just some large positive number to initialize, costs always positive, and
   // lower is better.
-  private double bestCost = 1000000000.00;
-  //private List<QueryGraphUtils.Vertex> bestVertexes = null;
+  private Double bestCost = Double.POSITIVE_INFINITY;
   private RelNode bestOptNode = null;
   private int totalOpts;
+  private LoptMultiJoin multiJoin = null;
+  private RexBuilder rexBuilder = null;
 
   /** Creates an ExhaustiveJoinOrderRule. */
   public ExhaustiveJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -87,9 +88,73 @@ public class ExhaustiveJoinOrderRule extends RelOptRule {
   @Override
   public void onMatch(RelOptRuleCall call)
   {
+    bestCost = Double.POSITIVE_INFINITY;
+    bestOptNode = null;
+    totalOpts = 0;
+    // Setting original expressions importance to 0, so our choice will be
+    // chosen.
+    RelNode orig = call.getRelList().get(0);
+    call.getPlanner().setImportance(orig, 0.0);
+    final MultiJoin multiJoinRel = call.rel(0);
+    rexBuilder = multiJoinRel.getCluster().getRexBuilder();
+    //final RelBuilder relBuilder = call.builder();
+    multiJoin = new LoptMultiJoin(multiJoinRel);
+    mq = MyMetadataQuery.instance();
+    QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
 
+    System.out.println("total edges: " + qg.edges.size());
+    // FIXME: temporary
+    if (qg.edges.size() >= 12) {
+      return;
+    }
+    numAdded = 0;
+    recursiveAddNodes(call, new ArrayList<Integer>(), qg);
+    assert bestOptNode != null;
+    //assert bestVertexes != null;
+    // build a final optimized node using the bestVertexes
+    //System.out.println("bestCost: " + bestCost);
+    System.out.println("exhaustive search optNode cost " + mq.getCumulativeCost(bestOptNode));
+    call.transformTo(bestOptNode);
+  }
+
+  private void recursiveAddNodes(RelOptRuleCall call, ArrayList<Integer> usedEdges, QueryGraph curQG)
+  {
+    totalOpts += 1;
+    if (totalOpts % 1000 == 0) {
+      System.out.println("totalOpts = " + totalOpts);
+    }
+    if (curQG.edges.size() == 0) {
+      // do stuff
+      //QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+      //for (Integer edge: usedEdges) {
+        //qg.updateGraph(qg.edges.get(edge).factors.toArray());
+      //}
+      //RelNode optNode = curQG.getFinalOptimalRelNode();
+      //MyCost newCost = (MyCost) ((MyMetadataQuery) mq).getCumulativeCost(optNode);
+      //Double finalCost = newCost.getCost();
+      //if (finalCost < bestCost) {
+      if (curQG.costSoFar < bestCost) {
+        bestOptNode = curQG.getFinalOptimalRelNode();
+        bestCost = curQG.costSoFar;
+        //bestCost = finalCost;
+      }
+    }
+
+    for (int i = 0; i < curQG.edges.size(); i++) {
+      // try to use this edge next
+      ArrayList<Integer> newUsedEdges = new ArrayList<Integer>(usedEdges);
+      // how costly would choosing unusedEdge be?
+      newUsedEdges.add(i);
+      QueryGraph newQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+      for (Integer edge: newUsedEdges) {
+        newQG.updateGraph(newQG.edges.get(edge).factors.toArray());
+      }
+      if (newQG.costSoFar >= bestCost) {
+        continue;
+      }
+      recursiveAddNodes(call, newUsedEdges, newQG);
+    }
   }
 }
 
 // End ExhaustiveJoinOrderRule.java
-

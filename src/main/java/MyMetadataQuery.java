@@ -18,14 +18,30 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import org.apache.calcite.rel.core.*;
+import org.apache.calcite.plan.RelOptUtil;
+
+import org.apache.calcite.rel.core.*;
+import org.apache.calcite.plan.volcano.*;
+import org.apache.calcite.plan.hep.*;
+import org.apache.calcite.adapter.jdbc.*;
+import org.apache.calcite.rel.logical.*;
+import java.util.*;
+import java.io.Serializable;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.*;
 
 public class MyMetadataQuery extends RelMetadataQuery {
 
   // in terms of number of rows. This is used for calculating the cost in a
   // non-linear model.
-  private final double MEMORY_LIMIT = Math.pow(10, 5);
+  private final double MEMORY_LIMIT = Math.pow(10, 6);
   // TODO: support options: CM1, CM2, CM3, RowCount
   private final String COST_MODEL_NAME;
+
+  // FIXME: temporary solution. make this general purpose.
+  private final String BASE_CARDINALITIES_FILE_NAME = "cardinalities.ser";
+  public HashMap<String, HashMap<String, Double>> trueBaseCardinalities;
 
   /**
    * Returns an instance of RelMetadataQuery. It ensures that cycles do not
@@ -39,11 +55,64 @@ public class MyMetadataQuery extends RelMetadataQuery {
       RelMetadataQuery prototype) {
 		super(metadataProvider, prototype);
     this.COST_MODEL_NAME = QueryOptExperiment.getCostModelName();
+    trueBaseCardinalities = (HashMap) loadCardinalities();
+    if (trueBaseCardinalities == null) {
+      trueBaseCardinalities = new HashMap<String, HashMap<String, Double>>();
+    }
+  }
+
+  @Override
+  public Double getRowCount(RelNode rel) {
+    //System.out.println("getRowCount, node is type: " + rel.getClass().getName());
+    // FIXME: error checking needs to be done here!!!!
+    String query = QueryOptExperiment.getCurrentQuery();
+    HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(query);
+    if (curQueryMap == null) return super.getRowCount(rel);
+    if (rel instanceof Filter || rel instanceof TableScan) {
+      String tableName = MyUtils.getTableName(rel);
+      Double trueCard = curQueryMap.get(tableName);
+      if (trueCard == null) {
+        return super.getRowCount(rel);
+      }
+      String nodeString = RelOptUtil.toString(rel);
+      //System.out.println(nodeString + trueCard);
+      return trueCard;
+    } else if (rel instanceof RelSubset) {
+      // this seems like it should need special handling, but it probably wraps
+      // around either Filter / TableScan, so it will be handled when this
+      // function is called again.
+      return super.getRowCount(rel);
+    }
+    return super.getRowCount(rel);
+    //Double rowCount = null;
+    //boolean computeTrueCard = false;
+    //if (rel instanceof TableScan || rel instanceof JdbcTableScan) {
+      //System.out.println("TableScan!");
+      ////computeTrueCard = true;
+    //} else if (rel instanceof Filter || rel instanceof LogicalFilter) {
+      //// if child is TableScan, then it is Filter ( Scan ( ...)) block, so we
+      //// should compute the true cardinality of the base table
+      //System.out.println("child of Filter is: " + rel.getInput(0));
+      //if (rel.getInput(0) instanceof TableScan || rel.getInput(0) instanceof RelSubset) {
+        ////computeTrueCard = true;
+      //}
+    //} else if (rel instanceof RelSubset) {
+      //// just compute TrueCard here as well?
+      ////return getRowCount(rel.getInput(0));
+      //computeTrueCard = true;
+    //}
+    //if (computeTrueCard) {
+      //rowCount = QueryOptExperiment.getTrueCardinality(rel);
+    //} else {
+      //System.out.println("calling super class");
+      //rowCount = super.getRowCount(rel);
+    //}
+    //System.out.println("returning rowCount: " + rowCount);
+    //return rowCount;
   }
 
 	@Override
   public RelOptCost getCumulativeCost(RelNode rel) {
-    //System.out.println("memory limit is: " + MEMORY_LIMIT);
     if (rel instanceof Join && !COST_MODEL_NAME.equals("")) {
       RelNode left = ((Join) rel).getLeft();
       RelNode right = ((Join) rel).getRight();
@@ -55,8 +124,8 @@ public class MyMetadataQuery extends RelMetadataQuery {
         return leftCost.plus(rightCost).plus(curCost);
       } else {
         // FIXME:
-        //System.err.println("unsupported cost model " + COST_MODEL_NAME);
-        //System.exit(-1);
+        System.err.println("unsupported cost model " + COST_MODEL_NAME);
+        System.exit(-1);
       }
     }
     // else just treat it as usual
@@ -90,6 +159,45 @@ public class MyMetadataQuery extends RelMetadataQuery {
       }
     }
     return orig_cost;
+  }
+
+  public void saveUpdatedCardinalities() {
+    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCardinalities();
+    HashMap<String, HashMap<String, Double>> newCosts = new HashMap<String, HashMap<String, Double>>();
+    if (oldCosts != null){
+      // ignore this guy, file probably didn't exist.
+      newCosts.putAll(oldCosts);
+    }
+    newCosts.putAll(trueBaseCardinalities);
+    saveCardinalities(newCosts);
+  }
+
+  // FIXME: make these general purpose
+  private void saveCardinalities(Serializable obj)
+  {
+		try {
+			ObjectOutputStream oos = new ObjectOutputStream(
+							new FileOutputStream(BASE_CARDINALITIES_FILE_NAME)
+			);
+			oos.writeObject(obj);
+			oos.flush();
+			oos.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}
+  }
+
+  public Serializable loadCardinalities() {
+    try {
+      FileInputStream fis = new FileInputStream(BASE_CARDINALITIES_FILE_NAME);
+      ObjectInputStream ois = new ObjectInputStream(fis);
+      HashMap<String, HashMap<String, Double>> cards = (HashMap) ois.readObject();
+      ois.close();
+      return cards;
+    } catch (Exception e) {
+      System.out.println(e);
+    }
+    return null;
   }
 }
 

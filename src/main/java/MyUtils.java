@@ -20,6 +20,7 @@ public class MyUtils {
     } else if (rel instanceof TableScan) {
       List<String> names = rel.getTable().getQualifiedName();
       if (names != null) {
+        //System.out.println("table name was: " + names.get(1));
         // TODO: is the more general version ever needed?
         //String tableName = "";
         //for (String s : names) {

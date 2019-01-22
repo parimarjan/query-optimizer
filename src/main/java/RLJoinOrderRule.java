@@ -102,6 +102,7 @@ public class RLJoinOrderRule extends RelOptRule {
     // wrapper around RelMetadataQuery, to add support for non linear cost
     // models.
     final MyMetadataQuery mq = MyMetadataQuery.instance();
+    //final MyMetadataQuery mq = QueryOptExperiment.getMetadataQuery();
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
     zmq.queryGraph = queryGraph;

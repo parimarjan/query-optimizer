@@ -23,7 +23,7 @@ class Main {
     options.addOption(newOption("exhaustive", "use exhaustive search planner or not"));
     options.addOption(newOption("leftDeep", "use dynamic programming based left deep search planner or not"));
     options.addOption(newOption("verbose", "use exhaustive search planner or not"));
-    options.addOption(newOption("train", "use exhaustive search planner or not"));
+    options.addOption(newOption("train", ""));
     options.addOption(newOption("executeOnDB", "execute on DB or not"));
     options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
     options.addOption(newOption("dataset", "which dataset to use"));
@@ -62,8 +62,9 @@ class Main {
           }
         }
     } else if (nextQuery == -3) {
-      queries.add(0);
-      queries.add(1);
+      for (int i = 0; i < 41; i++) {
+        queries.add(i);
+      }
     } else {
       queries.add(nextQuery);
     }
@@ -100,6 +101,7 @@ class Main {
     System.out.println("costModel " + costModel);
     System.out.println("executeOnDB " + executeOnDB);
     System.out.println("dataset " + dataset);
+    System.out.println("train " + train);
 
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     if (exhaustive) {

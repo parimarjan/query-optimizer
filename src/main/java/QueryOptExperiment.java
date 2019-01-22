@@ -27,13 +27,15 @@ import org.apache.calcite.rel.logical.*;
 //import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
+import java.util.concurrent.TimeUnit;
 
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
 public class QueryOptExperiment {
 
-    private CalciteConnection conn;
+    private static CalciteConnection conn;
+    private static String dbUrl;
 
     public enum PLANNER_TYPE
     {
@@ -64,18 +66,17 @@ public class QueryOptExperiment {
                     //FilterJoinRule.FILTER_ON_JOIN,
 										//ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
-            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE);
-                             //FilterJoinRule.FILTER_ON_JOIN,
-                             //ProjectMergeRule.INSTANCE);
+            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE,
+                             FilterJoinRule.FILTER_ON_JOIN,
+                             ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> LEFT_DEEP_RULES =
             ImmutableList.of(LeftDeepJoinOrderRule.INSTANCE);
 
 
         public static final ImmutableList<RelOptRule> LOPT_RULES =
-            //ImmutableList.of(LoptOptimizeJoinRule.INSTANCE,
-            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE);
-                            //FilterJoinRule.FILTER_ON_JOIN,
-                            //ProjectMergeRule.INSTANCE);
+            ImmutableList.of(MyLoptOptimizeJoinRule.INSTANCE,
+                            FilterJoinRule.FILTER_ON_JOIN,
+                            ProjectMergeRule.INSTANCE);
 
         public static final ImmutableList<RelOptRule> RANDOM_RULES =
             ImmutableList.of(JoinOrderTest.INSTANCE);
@@ -90,10 +91,9 @@ public class QueryOptExperiment {
 				// node from the joins was projecting all the fields before projecting it down to
 				// only the selected fields
 				public static final ImmutableList<RelOptRule> RL_RULES = ImmutableList.of(
-            RLJoinOrderRule.INSTANCE);
-            //RLJoinOrderRule.INSTANCE,
-            //FilterJoinRule.FILTER_ON_JOIN,
-            //ProjectMergeRule.INSTANCE);
+            RLJoinOrderRule.INSTANCE,
+            FilterJoinRule.FILTER_ON_JOIN,
+            ProjectMergeRule.INSTANCE);
 
         // FIXME: not sure if we need to add other rules - like we
         // could add all of the Programs.RULE_SET here, and remove the
@@ -171,7 +171,11 @@ public class QueryOptExperiment {
     private static boolean train;
 
     // FIXME: temporary. Get rid of this soon.
-    private static boolean useSavedCosts = true;
+    private static boolean useSavedCosts = false;
+    private static String currentQuery;
+
+    // so we can use the same instance in various rules
+    //private static MyMetadataQuery mq;
 
     /*
     *************************************************************************
@@ -193,6 +197,7 @@ public class QueryOptExperiment {
         //this.costModelName = "CM2";
         this.onlyFinalReward = onlyFinalReward;
         this.verbose = verbose;
+        this.dbUrl = dbUrl;
         this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         DbInfo.init(conn);
         this.zmq = new ZeroMQServer(port, verbose);
@@ -232,6 +237,7 @@ public class QueryOptExperiment {
                 resultVerifier.put(escapedSql, new HashMap<String, String>());
             }
         }
+        //mq = MyMetadataQuery.instance();
     }
 
 
@@ -257,6 +263,7 @@ public class QueryOptExperiment {
         }
         if (verbose) System.out.println("nextQuery is: " + nextQuery);
         String query = allSqlQueries.get(queries.get(nextQuery));
+        currentQuery = query;
         zmq.query = query;
 
         zmq.waitForClientTill("reset");
@@ -275,16 +282,16 @@ public class QueryOptExperiment {
               numFailedQueries += 1;
             }
             System.out.println("failed in planAndExecute for " + plannerName + " for query number " + nextQuery);
-            System.out.println(e);
-            e.printStackTrace();
+            //System.out.println(e);
+            //e.printStackTrace();
             //zmq.optimizedCosts.get(query).put(plannerName, 0.00);
             //throw e;
           }
         }
         if (executeOnDB) {
           if (!verifyResults(query)) {
-            System.out.println("verifying results failed");
-            System.exit(-1);
+            System.err.println("verifying results failed");
+            //System.exit(-1);
           } else {
             System.out.println("verifying results succeeded");
           }
@@ -296,8 +303,19 @@ public class QueryOptExperiment {
       return costModelName;
     }
 
+    public static CalciteConnection getCalciteConnection() {
+      return conn;
+    }
+
     public static boolean onlyFinalReward() {
       return onlyFinalReward;
+    }
+
+    //public static MyMetadataQuery getMetadataQuery() {
+      //return mq;
+    //}
+    public static String getCurrentQuery() {
+      return currentQuery;
     }
 
     public static ZeroMQServer getZMQServer() {
@@ -328,15 +346,14 @@ public class QueryOptExperiment {
           // this query has not been seen so far.
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
         } else if (!executeOnDB && useSavedCosts) {
-          // FIXME: important, we're skipping over the rest.
           // for RL, or if we need to executeOnDb, we always continue executing.
-          //if (!plannerName.equals("RL")) {
-          if (plannerName.equals("EXHAUSTIVE")) {
+          //if (plannerName.equals("EXHAUSTIVE")) {
+          if (!plannerName.equals("RL")) {
             // let's check if this planner has been seen for this query.
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
-              //System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
+              System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
             }
           }
@@ -366,12 +383,7 @@ public class QueryOptExperiment {
         DbInfo.setCurrentQueryVisibleFeatures(node);
         // testing if features were set correctly
         ImmutableBitSet bs = DbInfo.getCurrentQueryVisibleFeatures();
-
         MyMetadataQuery mq = MyMetadataQuery.instance();
-        RelOptCost unoptCost = getCost(mq, node);
-        //System.out.println("unoptimized toString is: " + RelOptUtil.toString(node));
-        if (verbose) System.out.println("unoptimized cost is: " + unoptCost);
-        //System.out.println(RelOptUtil.dumpPlan("unoptimized plan:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         /// very important to do the replace EnumerableConvention thing
         RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
         try {
@@ -381,8 +393,9 @@ public class QueryOptExperiment {
             long start = System.currentTimeMillis();
             RelNode optimizedNode = planner.transform(0, traitSet,
                     node);
-            String optPlan = RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+            String optPlan = RelOptUtil.dumpPlan("optimized plan: \n", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
+            //System.out.println("optCost: " + optCost);
             if (verbose) System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             if (verbose) System.out.println("planning time: " +
@@ -402,6 +415,7 @@ public class QueryOptExperiment {
 
             if (executeOnDB) {
               System.out.println("going to execute " + plannerName);
+              //String results = executeNode(optimizedNode, conn);
               String results = executeNode(optimizedNode);
               resultVerifier.get(query).put(plannerName, results);
             }
@@ -486,44 +500,119 @@ public class QueryOptExperiment {
             //RelOptUtil.toString(hepTransform));
         //System.out.println("hep optimized cost is: " + mq.getCumulativeCost2(hepTransform));
         //System.out.println("executing hep optimized node...");
+        //executeNode(hepTransform, conn);
         executeNode(hepTransform);
     }
 
-    private String executeNode(RelNode node) {
-        String combinedResults = "";
-        try {
-            System.out.println("in execute node!");
-            RelRunner runner = conn.unwrap(RelRunner.class);
-            System.out.println("after conn.unwrap!");
-            PreparedStatement ps = runner.prepare(node);
-            System.out.println("executing node");
-            long start = System.currentTimeMillis();
-            ResultSet res = ps.executeQuery();
-            long end = System.currentTimeMillis();
-            long total = end - start;
-            System.out.println("execution time: " + total);
-            ResultSetMetaData rmd = res.getMetaData();
-            int num_columns = rmd.getColumnCount();
-            System.out.println("num columns " + num_columns);
-            int curLine = 0;
-            while (res.next()) {
-              if (curLine <= 1000) {
-                //System.out.println(res.getString(0));
-                for (int i = 1; i < num_columns+1; i++) {
-                  //System.out.println("column: " + i + ": " + res.getString(i));
-                  combinedResults += res.getString(i);
-                }
-              } else break;
-              curLine += 1;
-            }
-            System.out.println("totalLines = " + curLine);
-        } catch (SQLException e) {
-            System.out.println("caught exeception while executing query");
-            System.out.println(e);
-            e.printStackTrace();
-            System.exit(-1);
+    public static Double getTrueCardinality(RelNode node)
+    {
+      CalciteConnection curConn;
+      PreparedStatement ps = null;
+      ResultSet res = null;
+      Double cardinality = null;
+      System.out.println(RelOptUtil.dumpPlan("plan for node being executed:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+      try {
+        //curConn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+        curConn = conn;
+        RelRunner runner = curConn.unwrap(RelRunner.class);
+        ps = runner.prepare(node);
+        long start = System.currentTimeMillis();
+        System.out.println("executing node");
+        res = ps.executeQuery();
+        long end = System.currentTimeMillis();
+        long total = end - start;
+        System.out.println("execution time: " + total);
+        if (res != null) {
+          cardinality = 0.00;
+          while (res.next()) {
+            cardinality += 1.00;
+          }
+        } else {
+          // something went wrong? should we fail?
+          System.err.println("something went wrong while computing cardinality!!!");
+          cardinality = 0.00;
         }
-        return Integer.toString(combinedResults.hashCode());
+      } catch (SQLException e) {
+        System.out.println("caught exception while trying to find cardinality of subquery");
+        System.out.println(e);
+        e.printStackTrace();
+        System.exit(-1);
+      }
+      try {
+        ps.close();
+        res.close();
+      } catch (Exception e) {
+        System.out.println(e);
+        e.printStackTrace();
+        // no good way to handle this (?)
+        System.exit(-1);
+      }
+      System.out.println("true cardinality was: " + cardinality);
+      return cardinality;
+    }
+
+    public static String executeNode(RelNode node)
+    {
+      String combinedResults = "";
+      CalciteConnection curConn;
+      try {
+        curConn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+        //curConn = conn;
+        //System.out.println(RelOptUtil.dumpPlan("plan for node being executed:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        System.out.println("in execute node!");
+        System.out.println("nodeToString:\n " + RelOptUtil.toString(node));
+        RelRunner runner = curConn.unwrap(RelRunner.class);
+        System.out.println("after curConn.unwrap!");
+        PreparedStatement ps = runner.prepare(node);
+        System.out.println(ps);
+        ps.setQueryTimeout(10);
+        long start = System.currentTimeMillis();
+        ResultSet res = null;
+        System.out.println("executing node");
+        //res = ps.executeQuery();
+        try {
+          res = ps.executeQuery();
+        } catch (Exception e) {
+          curConn.close();
+          System.out.println("going to execute it again");
+          curConn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+          runner = curConn.unwrap(RelRunner.class);
+          ps = runner.prepare(node);
+          res = ps.executeQuery();
+        }
+        long end = System.currentTimeMillis();
+        long total = end - start;
+        System.out.println("execution time: " + total);
+        ResultSetMetaData rmd = res.getMetaData();
+        int num_columns = rmd.getColumnCount();
+        System.out.println("num columns " + num_columns);
+        int curLine = 0;
+        while (res.next()) {
+          if (curLine <= 1000) {
+            //System.out.println(res.getString(0));
+            for (int i = 1; i < num_columns+1; i++) {
+              //System.out.println("column: " + i + ": " + res.getString(i));
+              combinedResults += res.getString(i);
+            }
+          } else break;
+          curLine += 1;
+        }
+        System.out.println("totalLines = " + curLine);
+        //curConn.close();
+      } catch (SQLException e) {
+        System.out.println("caught exeception while executing query");
+        System.out.println(e);
+        e.printStackTrace();
+        //System.exit(-1);
+      }
+      try {
+        TimeUnit.SECONDS.sleep(2);
+      } catch (Exception e) {
+        System.out.println(e);
+        e.printStackTrace();
+        System.err.println("exception while sleeping");
+      }
+      return Integer.toString(combinedResults.hashCode());
     }
 
     private void printInfo(RelNode node) {

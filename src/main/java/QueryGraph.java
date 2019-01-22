@@ -95,15 +95,48 @@ public class QueryGraph {
     edges = new ArrayList<Edge>();
     // Add the orignal tables as vertexes
     int x = 0;
+    String curQuery = QueryOptExperiment.getCurrentQuery();
+    HashMap<String, Double> curQueryCard = mq.trueBaseCardinalities.get(curQuery);
+    if (curQueryCard == null) {
+      System.out.println("!!!!curQueryCard was null!!!!!");
+      curQueryCard = new HashMap<String, Double>();
+      mq.trueBaseCardinalities.put(curQuery, curQueryCard);
+    }
+    boolean cardinalitiesUpdated = false;
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
+      String tableName = MyUtils.getTableName(rel);
+      if (mq.trueBaseCardinalities.get(curQuery).get(tableName) == null) {
+        if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
+          // if it is NOT a filter block
+					if (RelOptUtil.toString(rel).contains("Filter")) {
+            System.out.println("bad table filter!");
+            Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
+            curQueryCard.put(tableName, trueCard);
+					} else {
+            if (tableName.equals("cast_info")) {
+              curQueryCard.put(tableName, 36244344.00);
+            } else if (tableName.equals("movie_info")) {
+              curQueryCard.put(tableName, 14835720.00);
+            }
+		      }
+        } else {
+          Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
+          curQueryCard.put(tableName, trueCard);
+        }
+        cardinalitiesUpdated = true;
+      }
       double rowCount = mq.getRowCount(rel);
       Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
       allVertexes.add(newVertex);
       updateRelNodes(newVertex);
       x += rel.getRowType().getFieldCount();
     }
+    if (cardinalitiesUpdated) {
+      mq.saveUpdatedCardinalities();
+    }
+
     // add the Edges
     for (RexNode node : multiJoin.getJoinFilters()) {
       edges.add(createEdge(node));
@@ -126,7 +159,7 @@ public class QueryGraph {
       //if (newEdge) edges.add(edge);
     //}
   }
-	
+
 	/*
 	 */
 	// FIXME: this can not be called multiple times as it changes the state of

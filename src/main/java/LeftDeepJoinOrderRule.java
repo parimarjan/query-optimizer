@@ -61,13 +61,12 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 
   private LoptMultiJoin multiJoin;
   private MyMetadataQuery mq;
-  private int numOptionsConsidered = 0;
-	// The keys represent a set of factors in the original vertices of the
-	// QueryGraph. The values represent a sequence of edges (represented by it's
-	// two factors in the ImmutableBitSet) that are chosen for the optimal
-	// memoized ordering for the given set of factors. We can use these to
-	// reconstruct the QueryGraph with a sequence of updateGraph steps for each
-	// of the edge
+  // The keys represent a set of factors in the original vertices of the
+  // QueryGraph. The values represent a sequence of edges (it's index at each
+  // stage in QueryGraph.edges) that are chosen for the optimal memoized
+  // ordering for the given set of factors. We can use these to reconstruct the
+  // QueryGraph with a sequence of updateGraph steps for each
+  // of the edge
   private HashMap<Set<Integer>, ArrayList<Integer>> memoizedBestJoins;
 
   /** Creates an LeftDeepJoinOrderRule. */
@@ -97,6 +96,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
+    //final MyMetadataQuery mq = QueryOptExperiment.getMetadataQuery();
     final MyMetadataQuery mq = MyMetadataQuery.instance();
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
 
@@ -117,9 +117,8 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 			List<Set<Integer>> res = new ArrayList<>();
 			getSubsets(initialVertexIdxs, k, 0, new HashSet<Integer>(), res);
 			for (Set<Integer> subset : res) {
-				//System.out.println("subset: " + subset);
 				// the subset might already be memoized.
-				double minCost = 10e10;
+				double minCost = Double.POSITIVE_INFINITY;
 				ArrayList<Integer> bestEdges = null;
 
 				// basically, at the end of this iteration, we should have the current
@@ -157,6 +156,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 							neededFactorsBld.set(s_i);
 						}
 					} else {
+            //// FIXME: Not sure about this.
 						// the last vertex in curVertexes must be the right factor since we
 						// are doing left-deep joins
 						neededFactorsBld.set(qg.allVertexes.size() - 1);
@@ -195,7 +195,6 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 				memoizedBestJoins.put(subset, bestEdges);
 			}
 		}
-
 		// celebrate and add the relNode being developed so far from optRelNodes
 		// to the set of equivalent nodes.
 		QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());

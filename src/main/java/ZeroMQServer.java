@@ -138,16 +138,20 @@ public class ZeroMQServer {
         resp = "";
         break;
       case "getJoinsCost":
-        if (verbose) System.out.println("getJoinsCost");
         //resp = "";
         resp = 0.00;
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
-        Double totalCost = optimizedCosts.get(query).get(plannerName);
-        if (totalCost == null) {
-          // has not been executed ...
+        Double totalCost = 0.00;
+        if (optimizedCosts.get(query) == null) {
+          // query hasn't been seen yet
           break;
+        } else {
+          totalCost = optimizedCosts.get(query).get(plannerName);
+        }
+        if (totalCost == null) {
+            break;
         }
         if (verbose) System.out.println("totalCost was not null!");
 
@@ -207,6 +211,7 @@ public class ZeroMQServer {
         resp = episodeDone;
         break;
       default:
+        System.out.println("ZeroMQServer DEFAULT!!!");
         return msg;
     }
 
@@ -218,7 +223,8 @@ public class ZeroMQServer {
         System.out.println("there was an error while sending stuff!!");
         // at the least call close here.
         // FIXME: exiting from java in general seems to fail silently..
-        //System.exit(-1);
+        System.out.println(resp);
+        System.exit(-1);
     }
     return msg;
   }
@@ -230,11 +236,15 @@ public class ZeroMQServer {
       while (!reset) {
         String cmd = waitForCommand();
         if (cmd.equals(breakMsg)) {
+          //System.out.println("breaking out of waitForClientTill " + breakMsg);
           break;
         }
       }
     } catch (Exception e) {
-
+      System.out.println("caught exception in waitForClientTill " + breakMsg);
+      System.out.println(e);
+      e.printStackTrace();
+      System.exit(-1);
     }
   }
 }

@@ -614,8 +614,9 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     if (joinKeys.isEmpty()) {
       return null;
     } else {
-      return mq.getDistinctRowCount(semiJoinOpt.getChosenSemiJoin(factor),
-          joinKeys.build(), null);
+      return mq.getRowCount(semiJoinOpt.getChosenSemiJoin(factor));
+      //return mq.getDistinctRowCount(semiJoinOpt.getChosenSemiJoin(factor),
+          //joinKeys.build(), null);
     }
   }
 
