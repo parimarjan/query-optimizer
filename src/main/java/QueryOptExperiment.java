@@ -171,7 +171,7 @@ public class QueryOptExperiment {
     private static boolean train;
 
     // FIXME: temporary. Get rid of this soon.
-    private static boolean useSavedCosts = false;
+    private static boolean useSavedCosts = true;
     private static String currentQuery;
 
     // so we can use the same instance in various rules
@@ -221,6 +221,8 @@ public class QueryOptExperiment {
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
+            //if (f.getName().contains("11")) {
+
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -256,6 +258,7 @@ public class QueryOptExperiment {
       zmq.waitForClientTill("getAttrCount");
       int nextQuery = -1;
       while (true) {
+        zmq.waitForClientTill("reset");
         if (train ) {
           nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
         } else {
@@ -265,8 +268,9 @@ public class QueryOptExperiment {
         String query = allSqlQueries.get(queries.get(nextQuery));
         currentQuery = query;
         zmq.query = query;
+        System.out.println(query);
+        System.out.println("nextQuery: " + nextQuery);
 
-        zmq.waitForClientTill("reset");
         if (zmq.END) break;
         zmq.reset = false;
         for (int i = 0; i < volcanoPlanners.size(); i++) {
@@ -347,8 +351,8 @@ public class QueryOptExperiment {
           zmq.optimizedCosts.put(query, new HashMap<String, Double>());
         } else if (!executeOnDB && useSavedCosts) {
           // for RL, or if we need to executeOnDb, we always continue executing.
-          //if (plannerName.equals("EXHAUSTIVE")) {
-          if (!plannerName.equals("RL")) {
+          if (plannerName.equals("EXHAUSTIVE")) {
+          //if (!plannerName.equals("RL")) {
             // let's check if this planner has been seen for this query.
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {

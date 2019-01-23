@@ -63,7 +63,7 @@ class Main {
         }
     } else if (nextQuery == -3) {
       for (int i = 0; i < 41; i++) {
-        queries.add(i);
+          queries.add(i);
       }
     } else {
       queries.add(nextQuery);

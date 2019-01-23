@@ -27,7 +27,7 @@ public class ZeroMQServer {
   // Internal state for the query planning environment. Here, I just assume
   // that everything is very serial, so the states should be appropriately
   // updated whenever someone asks for it.
-  public int episodeNum = 0;
+  //public int episodeNum = 0;
   public int nextAction = -1;
   public boolean reset = false;
   public boolean END = false;
@@ -176,8 +176,11 @@ public class ZeroMQServer {
         resp = DbInfo.attrCount;
         break;
       case "reset":
-        episodeNum = 0;
+        //episodeNum = 0;
         reset = true;
+        resp = "";
+        break;
+      case "curQuery":
         resp = query;
         break;
       case "getActions":
