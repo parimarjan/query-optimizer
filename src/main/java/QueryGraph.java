@@ -38,36 +38,46 @@ import org.apache.calcite.plan.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.*;
 
-/* TODO:
+/* Represents the Graph for a Join Reordering problem at any given state,
+ * using internal classes "Vertex -> LeafVertex, and JoinVertex" and Edge.
  */
-public class QueryGraph {
+public class QueryGraph implements CsgCmpIterator {
 
-  // Note: these include all the vertexes in the collapsing query
-  // graph as successive joins are chosen
+  // Note: these include the current vertexes in the collapsing query graph as
+  // successive joins are chosen. The initial vertices always start as
+  // LeafVertex objects, and after every join, we add new JoinVertex objects to
+  // the list. After a join, the previous vertex values are set to null. (Note:
+  // we DO NOT remove any vertex from the list as it would change the
+  // numberings of other vertices - which a lot of the state, including the
+  // edges, are based on these indices. But once a vertex has been joined, it
+  // is never again utilized since all the edges connected to it should point
+  // to the new JoinVertex object. )
   public ArrayList<Vertex> allVertexes;
   // These are only the edges in the CURRENT state of the query graph. Thus, to
   // get the current graph, just traverse the edges and add the appropriate
   // vertices
   public ArrayList<Edge> edges;
-	// cumulative cost of the joins we have done so far in the QueryGraph.
+	// Cumulative cost of the joins we have done so far in the QueryGraph.
 	public Double costSoFar;
-  // used to get the RelNode corresponding to the joins we have done so far.
+  // Used to get the RelNode corresponding to the Joins we have done so far.
+  // These RelNodes are required to run our custom cost models using the
+  // MetadataQuery interface
   List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
+  private MyMetadataQuery mq;
 
-  // FIXME: maybe we can build this independently of this?
+  // FIXME: maybe we can build this independently of this? Not sure if this
+  // object adds anything useful.
   private LoptMultiJoin multiJoin;
   private RexBuilder rexBuilder;
   private RelBuilder relBuilder;
-  private MyMetadataQuery mq;
   private PrintWriter pw = null;
   private HashMap<Integer, Integer> mapToDatabase;
 
-  /* TODO:
-   */
 	// FIXME: do we really need to use LoptMultiJoin? seems to have too many
 	// unneccesary things. Perhaps we can just use MultiJoin / or have our own
 	// class to represent the relevant fields?
-  public QueryGraph(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder rexBuilder, RelBuilder relBuilder)
+  public QueryGraph(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder
+      rexBuilder, RelBuilder relBuilder)
   {
 		this.costSoFar = 0.00;
     this.multiJoin = multiJoin;
@@ -142,22 +152,22 @@ public class QueryGraph {
       edges.add(createEdge(node));
     }
 
-    // TODO: maybe use this version?
-    //final List<LoptMultiJoin2.Edge> unusedEdges = new ArrayList<>();
-    //for (RexNode node : multiJoin.getJoinFilters()) {
-      //LoptMultiJoin2.Edge edge = multiJoin.createEdge2(node);
-      //boolean newEdge = true;
-      //for (LoptMultiJoin2.Edge edge2 : unusedEdges) {
-        //if (edge2.factors.contains(edge.factors)) {
-          ////System.out.println("!!going to merge an edge!!");
-          //newEdge = false;
-          //// combine these edges
-          //edge2.mergeEdge(edge, rexBuilder);
-          //break;
-        //}
-      //}
-      //if (newEdge) edges.add(edge);
-    //}
+    // if there are two edges between the same pair of nodes, this collapses
+    // them to a single edge.
+    // Does not seem to be required for any of the queries we have seen so far
+    for (RexNode node : multiJoin.getJoinFilters()) {
+      Edge edge = createEdge(node);
+      boolean newEdge = true;
+      for (Edge edge2 : edges) {
+        if (edge2.factors.contains(edge.factors)) {
+          newEdge = false;
+          // combine these edges
+          edge2.mergeEdge(edge, rexBuilder);
+          break;
+        }
+      }
+      if (newEdge) edges.add(edge);
+    }
   }
 
 	/*
@@ -179,7 +189,6 @@ public class QueryGraph {
   public static abstract class Vertex
   {
     final int id;
-
     protected final ImmutableBitSet factors;
     final double cost;
     // one hot attributes mapping based on the DQ paper
@@ -299,14 +308,12 @@ public class QueryGraph {
   }
 
   /// FIXME: can we make this private?
-  public ImmutableBitSet mapToDBFeatures(ImmutableBitSet bs)
+  private ImmutableBitSet mapToDBFeatures(ImmutableBitSet bs)
   {
     ImmutableBitSet.Builder featuresBuilder = ImmutableBitSet.builder();
     for (Integer i : bs) {
       Integer test = mapToDatabase.get(i);
-      if (test == null) {
-        System.out.println("test was null!!!");
-      }
+      assert test != null;
       featuresBuilder.set(mapToDatabase.get(i));
     }
     return featuresBuilder.build();
@@ -502,4 +509,150 @@ public class QueryGraph {
     return factorRefBitmap.build();
   }
 
+  // FIXME: assumes that this is a QueryGraph in it's initial stage without any
+  // modifications (e.g., no vertices have been joined).
+  @Override
+  public Iterator<Set<ImmutableBitSet>> csgCmpIterator() {
+    ArrayList<Set<ImmutableBitSet>> csgCmpPairs = new ArrayList<Set<ImmutableBitSet>>();
+    for (int i = allVertexes.size()-1; i >= 0; i--) {
+      // select the ith vertex as a subgraph, and getting all matching vertices
+      ImmutableBitSet vi = ImmutableBitSet.range(i, i+1);
+      updateCsgCmpPairs(vi, csgCmpPairs);
+      // find all of it's complementary pairs
+      ImmutableBitSet Bi = ImmutableBitSet.range(0, i+1);
+      ArrayList<ImmutableBitSet> enlargedVi = enumerateCsgRec(vi, Bi);
+      for (ImmutableBitSet vj : enlargedVi) {
+        updateCsgCmpPairs(vj, csgCmpPairs);
+      }
+    }
+    return csgCmpPairs.iterator();
+		//return new Iterator<Set<ImmutableBitSet>>() {
+      //// as a temporary solution, let us just generate a complete ArrayList,
+      //// and return that.
+      //public boolean hasNext() {
+        //return true;
+      //}
+
+      //public Set<ImmutableBitSet> next() {
+        //return null;
+      //}
+
+      //public void remove() {
+        //throw new UnsupportedOperationException();
+      //}
+    //};
+  }
+
+  /* Given a subset {vi}, finds all it's complementary subgraphs, and updates
+   * the list csgCmpPairs.
+   */
+  private void updateCsgCmpPairs(ImmutableBitSet vi,
+      ArrayList<Set<ImmutableBitSet>> csgCmpPairs)
+  {
+    // find all of it's complementary pairs
+    List<ImmutableBitSet> complementarySubgraphs = enumerateComplementarySubgraphs(vi);
+    for (ImmutableBitSet cmp : complementarySubgraphs) {
+      HashSet<ImmutableBitSet> curPair = new HashSet<ImmutableBitSet>();
+      curPair.add(vi);
+      curPair.add(cmp);
+      csgCmpPairs.add(curPair);
+    }
+  }
+
+  /* Given a bitset S, representing a subgraph, and a bitset to `exclude`, X,
+   * this expands on S, to produce more subgraphs according to the algorithm on
+   * page 112 in
+   * https://db.in.tum.de/teaching/ws1415/queryopt/chapter3.pdf?lang=en.
+   */
+  private ArrayList<ImmutableBitSet> enumerateCsgRec(ImmutableBitSet S, ImmutableBitSet X)
+  {
+    ArrayList<ImmutableBitSet> connectedSubgraphs = new ArrayList<ImmutableBitSet>();
+    ImmutableBitSet N = getNeighbors(S);
+    N = N.except(X);
+    // Enumerate subsets of N in increasing order.
+    // FIXME: we could use the powerset operator for ImmutableBitSet's but need
+    // to verify that it is in correct order.
+    ArrayList<ImmutableBitSet> subgraphs = new ArrayList<ImmutableBitSet>();
+    for (int k = 1; k < N.size(); k++) {
+      getSubsets(N.toList(), k, 0, new HashSet<Integer>(), subgraphs);
+    }
+
+    for (ImmutableBitSet subgraph : subgraphs) {
+      // FIXME: verify this does not change the original bitset S.
+      System.out.println("original S: " + S);
+      connectedSubgraphs.add(S.union(subgraph));
+      System.out.println("original S should not have changes: " + S);
+    }
+
+    for (ImmutableBitSet subgraph : subgraphs) {
+      ArrayList<ImmutableBitSet> expandedSubgraphs = enumerateCsgRec(S.union(subgraph), X.union(N));
+      connectedSubgraphs.addAll(expandedSubgraphs);
+    }
+    return connectedSubgraphs;
+  }
+
+  /* Given a set, S, find all neighboring vertices (all other vertexes that have an edge to one of the elements in S).
+   */
+  private ImmutableBitSet getNeighbors(ImmutableBitSet S)
+  {
+    // loop over all the edges, and check their factors. Exactly one factor
+    // should be in S, i.e., the size of intersection should be 1.
+    ImmutableBitSet.Builder neighbors = ImmutableBitSet.builder();
+    for (Edge edge : edges) {
+      if (edge.factors.intersect(S).size() == 1) {
+        // find the new factor from the two in edge.factors
+        for (Integer v : edge.factors) {
+          ImmutableBitSet vTmp = ImmutableBitSet.range(v, v+1);
+          if (!S.contains(vTmp)) {
+            neighbors.addAll(vTmp);
+          }
+        }
+      }
+    }
+    return neighbors.build();
+  }
+
+	/* Modified from:
+	 * https://stackoverflow.com/questions/12548312/find-all-subsets-of-length-k-in-an-array
+	 */
+  private static void getSubsets(List<Integer> superSet, int k, int idx, Set<Integer> current, List<ImmutableBitSet> solution)
+	{
+    //successful stop clause
+    if (current.size() == k) {
+        ImmutableBitSet.Builder solutionBld = ImmutableBitSet.builder();
+        solutionBld.addAll(current);
+        solution.add(solutionBld.build());
+        return;
+    }
+    //unsuccessful stop clause
+    if (idx == superSet.size()) return;
+    Integer x = superSet.get(idx);
+    current.add(x);
+    //"guess" x is in the subset
+    getSubsets(superSet, k, idx+1, current, solution);
+    current.remove(x);
+    //"guess" x is not in the subset
+    getSubsets(superSet, k, idx+1, current, solution);
+	}
+
+  private List<ImmutableBitSet> enumerateComplementarySubgraphs(ImmutableBitSet S1)
+  {
+    ArrayList<ImmutableBitSet> complementarySubgraphs = new ArrayList<ImmutableBitSet>();
+    Integer minS1 = Collections.min(S1.toList());
+    ImmutableBitSet B = ImmutableBitSet.range(0, minS1+1);
+    ImmutableBitSet X = B.union(S1);
+    ImmutableBitSet N = getNeighbors(S1).except(X);
+    for (int i = allVertexes.size(); i > 0; i--) {
+      if (N.get(i)) {
+        // this index is in the neighbors!
+        ImmutableBitSet vi = ImmutableBitSet.range(i, i+1);
+        complementarySubgraphs.add(vi);
+        // get all expanded ones
+        ImmutableBitSet Bi = ImmutableBitSet.range(0, i+1);
+        complementarySubgraphs.addAll(enumerateCsgRec(vi, X.union(Bi.intersect(N))));
+      }
+    }
+    return complementarySubgraphs;
+  }
 }
+
