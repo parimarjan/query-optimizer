@@ -217,7 +217,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
         solution.add(new HashSet<>(current));
         return;
     }
-    //unseccessful stop clause
+    //unsuccessful stop clause
     if (idx == superSet.size()) return;
     Integer x = superSet.get(idx);
     current.add(x);

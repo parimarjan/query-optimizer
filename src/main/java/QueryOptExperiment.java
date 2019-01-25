@@ -268,9 +268,6 @@ public class QueryOptExperiment {
         String query = allSqlQueries.get(queries.get(nextQuery));
         currentQuery = query;
         zmq.query = query;
-        System.out.println(query);
-        System.out.println("nextQuery: " + nextQuery);
-
         if (zmq.END) break;
         zmq.reset = false;
         for (int i = 0; i < volcanoPlanners.size(); i++) {
@@ -280,7 +277,6 @@ public class QueryOptExperiment {
               numSuccessfulQueries += 1;
             }
           } catch (Exception e) {
-            //System.out.println(query);
             String plannerName = plannerTypes.get(i).name();
             if (plannerName.equals("EXHAUSTIVE")) {
               numFailedQueries += 1;

@@ -105,7 +105,6 @@ public class RLJoinOrderRule extends RelOptRule {
     //final MyMetadataQuery mq = QueryOptExperiment.getMetadataQuery();
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
-    System.out.println("number of edges: " + queryGraph.edges.size());
     zmq.queryGraph = queryGraph;
 
     // only used for finalReward scenario
@@ -149,8 +148,6 @@ public class RLJoinOrderRule extends RelOptRule {
       }
       zmq.waitForClientTill("getReward");
     }
-    System.out.println("num joins: " + joinOrderSeq.size());
-    System.out.println("joinOrderSeq: " + joinOrderSeq);
 
     /// FIXME: need to understand what this TargetMapping business really is...
     /// just adding a projection on top of the left nodes we had.
