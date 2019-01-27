@@ -49,20 +49,20 @@ class Main {
     System.out.println("***************************");
     if (nextQuery == -1) {
       // even version
-      for (int i = 0; i < 41; i++) {
+      for (int i = 0; i < 113; i++) {
         if (i % 2 == 0) {
           queries.add(i);
         }
       }
     } else if (nextQuery == -2) {
         // odd version
-        for (int i = 0; i < 41; i++) {
+        for (int i = 0; i < 113; i++) {
           if (i % 2 != 0) {
             queries.add(i);
           }
         }
     } else if (nextQuery == -3) {
-      for (int i = 0; i < 41; i++) {
+      for (int i = 0; i < 113; i++) {
           queries.add(i);
       }
     } else {

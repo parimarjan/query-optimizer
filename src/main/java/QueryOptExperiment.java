@@ -66,7 +66,8 @@ public class QueryOptExperiment {
                     //FilterJoinRule.FILTER_ON_JOIN,
 										//ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> EXHAUSTIVE_RULES =
-            ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE,
+            //ImmutableList.of(ExhaustiveJoinOrderRule.INSTANCE,
+            ImmutableList.of(ExhaustiveDPJoinOrderRule.INSTANCE,
                              FilterJoinRule.FILTER_ON_JOIN,
                              ProjectMergeRule.INSTANCE);
         public static final ImmutableList<RelOptRule> LEFT_DEEP_RULES =
@@ -264,8 +265,11 @@ public class QueryOptExperiment {
         } else {
           nextQuery = (nextQuery + 1) % queries.size();
         }
+        //System.out.println("nextQuery is: " + nextQuery);
+
         if (verbose) System.out.println("nextQuery is: " + nextQuery);
         String query = allSqlQueries.get(queries.get(nextQuery));
+        //System.out.println(query);
         currentQuery = query;
         zmq.query = query;
         if (zmq.END) break;
@@ -282,8 +286,8 @@ public class QueryOptExperiment {
               numFailedQueries += 1;
             }
             System.out.println("failed in planAndExecute for " + plannerName + " for query number " + nextQuery);
-            //System.out.println(e);
-            //e.printStackTrace();
+            System.out.println(e);
+            e.printStackTrace();
             //zmq.optimizedCosts.get(query).put(plannerName, 0.00);
             //throw e;
           }
@@ -353,7 +357,7 @@ public class QueryOptExperiment {
             Double cost = planCostMap.get(plannerName);
             if (cost != null) {
               // have already run this, so don't have to do it again.
-              System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
+              if (verbose) System.out.println("saved optimized cost for " + plannerName + " is: " + cost);
               return true;
             }
           }
@@ -395,7 +399,7 @@ public class QueryOptExperiment {
                     node);
             String optPlan = RelOptUtil.dumpPlan("optimized plan: \n", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
             RelOptCost optCost = getCost(mq, optimizedNode);
-            //System.out.println("optCost: " + optCost);
+            //System.out.println("optCost for: " + plannerName + ": " + optCost);
             if (verbose) System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
             if (verbose) System.out.println("planning time: " +
@@ -640,6 +644,12 @@ public class QueryOptExperiment {
     private String queryRewriteForCalcite(String query) {
         String newQuery = query.replace(";", "");
         newQuery = newQuery.replace("!=", "<>");
+        // weird trouble for calcite because of this
+        newQuery = newQuery.replace("AS character", "");
+        // using `at' for a table alias seems to cause trouble
+        //newQuery = newQuery.replace("\\bat,\\b", "att,");
+        newQuery = newQuery.replace("at,", "att,");
+        newQuery = newQuery.replace("at.", "att.");
         // debugging purposes
         // FIXME: doesn't seem easy to add text here without running into
         // weird formatting issues (while it works just fine if we write the

@@ -1,20 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
@@ -54,13 +37,13 @@ import org.apache.calcite.sql.parser.*;
 
 /**
  */
-public class LeftDeepJoinOrderRule extends RelOptRule 
+public class LeftDeepJoinOrderRule extends RelOptRule
 {
   public static final LeftDeepJoinOrderRule INSTANCE =
       new LeftDeepJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
-  private LoptMultiJoin multiJoin;
-  private MyMetadataQuery mq;
+  //private LoptMultiJoin multiJoin;
+  //private MyMetadataQuery mq;
   // The keys represent a set of factors in the original vertices of the
   // QueryGraph. The values represent a sequence of edges (it's index at each
   // stage in QueryGraph.edges) that are chosen for the optimal memoized
@@ -210,7 +193,7 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 	/* Modified from:
 	 * https://stackoverflow.com/questions/12548312/find-all-subsets-of-length-k-in-an-array
 	 */
-  private static void getSubsets(List<Integer> superSet, int k, int idx, Set<Integer> current,List<Set<Integer>> solution) 
+  private static void getSubsets(List<Integer> superSet, int k, int idx, Set<Integer> current,List<Set<Integer>> solution)
 	{
     //successful stop clause
     if (current.size() == k) {

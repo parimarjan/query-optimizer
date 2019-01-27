@@ -117,24 +117,22 @@ public class QueryGraph implements CsgCmpIterator {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
-      if (mq.trueBaseCardinalities.get(curQuery).get(tableName) == null) {
+
+      if (mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
+      {
         if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
           // if it is NOT a filter block
-					if (RelOptUtil.toString(rel).contains("Filter")) {
-            System.out.println("bad table filter!");
-            Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
-            curQueryCard.put(tableName, trueCard);
-					} else {
+					if (!RelOptUtil.toString(rel).contains("Filter")) {
             if (tableName.equals("cast_info")) {
               curQueryCard.put(tableName, 36244344.00);
             } else if (tableName.equals("movie_info")) {
               curQueryCard.put(tableName, 14835720.00);
             }
+            continue;
 		      }
-        } else {
-          Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
-          curQueryCard.put(tableName, trueCard);
         }
+        Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
+        curQueryCard.put(tableName, trueCard);
         cardinalitiesUpdated = true;
       }
       double rowCount = mq.getRowCount(rel);
@@ -357,9 +355,9 @@ public class QueryGraph implements CsgCmpIterator {
       majorFactor = factors[1];
       minorFactor = factors[0];
     }
-
     final Vertex majorVertex = allVertexes.get(majorFactor);
     final Vertex minorVertex = allVertexes.get(minorFactor);
+
     // set v ensures that the new vertex we are creating will be added to the
     // factors of the new vertex.
     final int v = allVertexes.size();
@@ -426,6 +424,29 @@ public class QueryGraph implements CsgCmpIterator {
     double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
 		this.costSoFar += cost;
     return cost;
+  }
+
+  /* @factors: length 2 array, representing the two factors in a given join.
+   * Each element has the factor indices for each of the nodes in the join.
+   */
+  public double updateGraph(ImmutableBitSet[] factors)
+  {
+    // first convert the factors, to int [], representing indices
+    int[] factorIndices = new int[2];
+    for (int i = 0; i < 2; i++) {
+      ImmutableBitSet factor = factors[i];
+      for (int j = 0; j < allVertexes.size(); j++) {
+        Vertex v = allVertexes.get(j);
+        // v can be null, because once it is joined, we set it to null
+        // we use contains, because when updating factors, we add the old and
+        // NEW factor as well
+        if (v != null && v.factors.contains(factor)) {
+          factorIndices[i] = j;
+        }
+      }
+    }
+    assert factorIndices[0] != factorIndices[1];
+    return updateGraph(factorIndices);
   }
 
   /* Updates the list of relNodes that correspond to each join order selection.
@@ -512,8 +533,9 @@ public class QueryGraph implements CsgCmpIterator {
   // FIXME: assumes that this is a QueryGraph in it's initial stage without any
   // modifications (e.g., no vertices have been joined).
   @Override
-  public Iterator<Set<ImmutableBitSet>> csgCmpIterator() {
-    ArrayList<Set<ImmutableBitSet>> csgCmpPairs = new ArrayList<Set<ImmutableBitSet>>();
+  public Iterator<ImmutableBitSet[]> csgCmpIterator() {
+    ArrayList<ImmutableBitSet[]> csgCmpPairs = new ArrayList<ImmutableBitSet[]>();
+    //System.out.println("csgCmpIterator!");
     for (int i = allVertexes.size()-1; i >= 0; i--) {
       // select the ith vertex as a subgraph, and getting all matching vertices
       ImmutableBitSet vi = ImmutableBitSet.range(i, i+1);
@@ -525,6 +547,7 @@ public class QueryGraph implements CsgCmpIterator {
         updateCsgCmpPairs(vj, csgCmpPairs);
       }
     }
+    System.out.println("size of csgCmpPairs: " + csgCmpPairs.size());
     return csgCmpPairs.iterator();
 		//return new Iterator<Set<ImmutableBitSet>>() {
       //// as a temporary solution, let us just generate a complete ArrayList,
@@ -547,14 +570,14 @@ public class QueryGraph implements CsgCmpIterator {
    * the list csgCmpPairs.
    */
   private void updateCsgCmpPairs(ImmutableBitSet vi,
-      ArrayList<Set<ImmutableBitSet>> csgCmpPairs)
+      ArrayList<ImmutableBitSet[]> csgCmpPairs)
   {
     // find all of it's complementary pairs
     List<ImmutableBitSet> complementarySubgraphs = enumerateComplementarySubgraphs(vi);
     for (ImmutableBitSet cmp : complementarySubgraphs) {
-      HashSet<ImmutableBitSet> curPair = new HashSet<ImmutableBitSet>();
-      curPair.add(vi);
-      curPair.add(cmp);
+      ImmutableBitSet [] curPair = new ImmutableBitSet[2];
+      curPair[0] = vi;
+      curPair[1] = cmp;
       csgCmpPairs.add(curPair);
     }
   }
@@ -579,9 +602,7 @@ public class QueryGraph implements CsgCmpIterator {
 
     for (ImmutableBitSet subgraph : subgraphs) {
       // FIXME: verify this does not change the original bitset S.
-      System.out.println("original S: " + S);
       connectedSubgraphs.add(S.union(subgraph));
-      System.out.println("original S should not have changes: " + S);
     }
 
     for (ImmutableBitSet subgraph : subgraphs) {
@@ -597,19 +618,23 @@ public class QueryGraph implements CsgCmpIterator {
   {
     // loop over all the edges, and check their factors. Exactly one factor
     // should be in S, i.e., the size of intersection should be 1.
-    ImmutableBitSet.Builder neighbors = ImmutableBitSet.builder();
+    ImmutableBitSet.Builder neighborsBld = ImmutableBitSet.builder();
     for (Edge edge : edges) {
-      if (edge.factors.intersect(S).size() == 1) {
+      //System.out.println("edge.factors: " + edge.factors);
+      //System.out.println("edge.factors.intersect(S): " + edge.factors.intersect(S));
+      if (edge.factors.intersect(S).cardinality() == 1) {
         // find the new factor from the two in edge.factors
         for (Integer v : edge.factors) {
           ImmutableBitSet vTmp = ImmutableBitSet.range(v, v+1);
           if (!S.contains(vTmp)) {
-            neighbors.addAll(vTmp);
+            neighborsBld.addAll(vTmp);
           }
         }
       }
     }
-    return neighbors.build();
+    ImmutableBitSet neighbors = neighborsBld.build();
+    //System.out.println("neighbors of: " + S + " are: " + neighbors);
+    return neighbors;
   }
 
 	/* Modified from:
@@ -637,15 +662,22 @@ public class QueryGraph implements CsgCmpIterator {
 
   private List<ImmutableBitSet> enumerateComplementarySubgraphs(ImmutableBitSet S1)
   {
+    //System.out.println("enumerateComplementarySubgraphs");
     ArrayList<ImmutableBitSet> complementarySubgraphs = new ArrayList<ImmutableBitSet>();
     Integer minS1 = Collections.min(S1.toList());
     ImmutableBitSet B = ImmutableBitSet.range(0, minS1+1);
     ImmutableBitSet X = B.union(S1);
     ImmutableBitSet N = getNeighbors(S1).except(X);
+    //System.out.println("S1: " + S1);
+    //System.out.println("B: " + B);
+    //System.out.println("X: " + X);
+    //System.out.println("N: " + N);
     for (int i = allVertexes.size(); i > 0; i--) {
       if (N.get(i)) {
+        //System.out.println("N.get(i) for i = " + i);
         // this index is in the neighbors!
         ImmutableBitSet vi = ImmutableBitSet.range(i, i+1);
+        //System.out.println("vi: " + vi);
         complementarySubgraphs.add(vi);
         // get all expanded ones
         ImmutableBitSet Bi = ImmutableBitSet.range(0, i+1);
