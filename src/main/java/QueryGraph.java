@@ -117,23 +117,27 @@ public class QueryGraph implements CsgCmpIterator {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
-
       if (mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
       {
+        System.out.println("tableName: " + tableName);
         if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
           // if it is NOT a filter block
-					if (!RelOptUtil.toString(rel).contains("Filter")) {
+          if (!RelOptUtil.toString(rel).contains("Filter")) {
             if (tableName.equals("cast_info")) {
               curQueryCard.put(tableName, 36244344.00);
             } else if (tableName.equals("movie_info")) {
               curQueryCard.put(tableName, 14835720.00);
             }
-            continue;
-		      }
+          } else {
+              Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
+              curQueryCard.put(tableName, trueCard);
+              cardinalitiesUpdated = true;
+          }
+        } else {
+          Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
+          curQueryCard.put(tableName, trueCard);
+          cardinalitiesUpdated = true;
         }
-        Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
-        curQueryCard.put(tableName, trueCard);
-        cardinalitiesUpdated = true;
       }
       double rowCount = mq.getRowCount(rel);
       Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
@@ -547,7 +551,6 @@ public class QueryGraph implements CsgCmpIterator {
         updateCsgCmpPairs(vj, csgCmpPairs);
       }
     }
-    System.out.println("size of csgCmpPairs: " + csgCmpPairs.size());
     return csgCmpPairs.iterator();
 		//return new Iterator<Set<ImmutableBitSet>>() {
       //// as a temporary solution, let us just generate a complete ArrayList,

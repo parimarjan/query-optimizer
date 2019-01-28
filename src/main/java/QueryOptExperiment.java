@@ -172,7 +172,8 @@ public class QueryOptExperiment {
     private static boolean train;
 
     // FIXME: temporary. Get rid of this soon.
-    private static boolean useSavedCosts = true;
+    // this does not seem to be robust enough. DO NOT USE IT.
+    private static boolean useSavedCosts = false;
     private static String currentQuery;
 
     // so we can use the same instance in various rules
@@ -222,8 +223,6 @@ public class QueryOptExperiment {
         for (File f : listOfFiles) {
             // FIXME: use regex to avoid index files etc.
             if (f.getName().contains(".sql")) {
-            //if (f.getName().contains("11")) {
-
                 String sql;
                 try {
                     sql = FileUtils.readFileToString(f);
@@ -234,9 +233,6 @@ public class QueryOptExperiment {
                 // FIXME: parse the sql to avoid calcite errors.
                 String escapedSql = queryRewriteForCalcite(sql);
                 allSqlQueries.add(escapedSql);
-                //if (allSqlQueries.size() >= 8) {
-                  //System.out.println(f.getName());
-                //}
                 resultVerifier.put(escapedSql, new HashMap<String, String>());
             }
         }
@@ -269,7 +265,6 @@ public class QueryOptExperiment {
 
         if (verbose) System.out.println("nextQuery is: " + nextQuery);
         String query = allSqlQueries.get(queries.get(nextQuery));
-        //System.out.println(query);
         currentQuery = query;
         zmq.query = query;
         if (zmq.END) break;
@@ -514,14 +509,14 @@ public class QueryOptExperiment {
       PreparedStatement ps = null;
       ResultSet res = null;
       Double cardinality = null;
-      System.out.println(RelOptUtil.dumpPlan("plan for node being executed:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+      //System.out.println(RelOptUtil.dumpPlan("plan for node being executed:", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
       try {
         //curConn = (CalciteConnection) DriverManager.getConnection(dbUrl);
         curConn = conn;
         RelRunner runner = curConn.unwrap(RelRunner.class);
         ps = runner.prepare(node);
         long start = System.currentTimeMillis();
-        System.out.println("executing node");
+        //System.out.println("executing node");
         res = ps.executeQuery();
         long end = System.currentTimeMillis();
         long total = end - start;
