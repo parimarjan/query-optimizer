@@ -105,7 +105,7 @@ public class QueryGraph implements CsgCmpIterator {
     edges = new ArrayList<Edge>();
     // Add the orignal tables as vertexes
     int x = 0;
-    String curQuery = QueryOptExperiment.getCurrentQuery();
+    String curQuery = QueryOptExperiment.getCurrentQuery().sql;
     HashMap<String, Double> curQueryCard = mq.trueBaseCardinalities.get(curQuery);
     if (curQueryCard == null) {
       System.out.println("!!!!curQueryCard was null!!!!!");
@@ -552,21 +552,6 @@ public class QueryGraph implements CsgCmpIterator {
       }
     }
     return csgCmpPairs.iterator();
-		//return new Iterator<Set<ImmutableBitSet>>() {
-      //// as a temporary solution, let us just generate a complete ArrayList,
-      //// and return that.
-      //public boolean hasNext() {
-        //return true;
-      //}
-
-      //public Set<ImmutableBitSet> next() {
-        //return null;
-      //}
-
-      //public void remove() {
-        //throw new UnsupportedOperationException();
-      //}
-    //};
   }
 
   /* Given a subset {vi}, finds all it's complementary subgraphs, and updates

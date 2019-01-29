@@ -88,6 +88,8 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
   //~ Methods ----------------------------------------------------------------
 
   public void onMatch(RelOptRuleCall call) {
+    RelNode orig = call.getRelList().get(0);
+    call.getPlanner().setImportance(orig, 0.0);
     final MultiJoin multiJoinRel = call.rel(0);
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     //final RelMetadataQuery mq = call.getMetadataQuery();

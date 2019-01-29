@@ -70,7 +70,7 @@ public class RLJoinOrderRule extends RelOptRule {
       new RLJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
   private final PrintWriter pw = null;
-  private boolean onlyFinalReward;
+  //private boolean params.onlyFinalReward;
   private ArrayList<Integer> joinOrderSeq;
 
   /** Creates an RLJoinOrderRule. */
@@ -98,7 +98,8 @@ public class RLJoinOrderRule extends RelOptRule {
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final RelBuilder relBuilder = call.builder();
-    onlyFinalReward = QueryOptExperiment.onlyFinalReward();
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+
     // wrapper around RelMetadataQuery, to add support for non linear cost
     // models.
     final MyMetadataQuery mq = MyMetadataQuery.instance();
@@ -109,44 +110,40 @@ public class RLJoinOrderRule extends RelOptRule {
 
     // only used for finalReward scenario
     Double costSoFar = 0.00;
+    zmq.episodeDone = 0;
     for (;;) {
       // break condition
-      final int[] factors;
-      if (queryGraph.edges.size() == 0) {
-        // No more edges. Are there any un-joined vertexes?
-        /// FIXME: simplify handling this by putting logic in query graph
-        /// TODO: how to handle this with a query graph?
-        zmq.episodeDone = 1;
-        final QueryGraph.Vertex lastVertex = Util.last(queryGraph.allVertexes);
-        final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
-        if (z < 0) {
-          break;
-        }
-        factors = new int[] {z, lastVertex.id};
-      } else {
-        // TODO: make this an externally provided function to choose the next
-        // edge.
-        zmq.episodeDone = 0;
-        factors = chooseNextEdge(queryGraph);
-      }
+      final int[] factors = chooseNextEdge(queryGraph);
+      if (factors == null) break;
 
       double cost = queryGraph.updateGraph(factors);
+      if (queryGraph.edges.size() == 0) zmq.episodeDone = 1;
 
-      if (!onlyFinalReward) {
-        costSoFar += cost;
+      // FIXME: onlyFinalReward is pretty hacky right now...
+      costSoFar += cost;    // only required for onlyFinalReward
+      if (!params.onlyFinalReward) {
         zmq.lastReward = -cost;
-      } else {
-        // reward will be 0.00 until the very end when we throw everything at
-        // them.
+      } else if (params.onlyFinalReward && !params.runtimeReward) {
+        // here, the final reward will be the sum of all intermediate rewards.
         zmq.lastTrueReward = -cost;
-        costSoFar += cost;
         if (queryGraph.edges.size() == 0) {
           zmq.lastReward = -costSoFar;
         } else {
           zmq.lastReward = 0.00;
         }
+      } else if (params.onlyFinalReward && params.runtimeReward) {
+        zmq.lastReward = 0.00;
       }
-      zmq.waitForClientTill("getReward");
+      // if onlyFinalReward && params.runtimeReward, then we can ignore all the
+      // lastTrueReward etc. stuff.
+
+      // We do not want to wait for getReward here if runtimeReward is set,
+      // AND the episode is over. Then, the final reward will be set after
+      // the planning is complete. Every other situation, we will stop and wait
+      // here.
+      if (!(params.runtimeReward && (zmq.episodeDone==1))) {
+        zmq.waitForClientTill("getReward");
+      }
     }
 
     /// FIXME: need to understand what this TargetMapping business really is...
@@ -186,7 +183,14 @@ public class RLJoinOrderRule extends RelOptRule {
    */
   private int [] chooseNextEdge(QueryGraph queryGraph)
   {
-    List<QueryGraph.Edge> unusedEdges = queryGraph.edges;
+    if (queryGraph.edges.size() == 0) {
+      final QueryGraph.Vertex lastVertex = Util.last(queryGraph.allVertexes);
+      final int z = lastVertex.factors.previousClearBit(lastVertex.id - 1);
+      if (z < 0) {
+        return null;
+      }
+      return new int[] {z, lastVertex.id};
+    }
 
     final int[] factors;
     ZeroMQServer zmq = QueryOptExperiment.getZMQServer();
@@ -196,13 +200,13 @@ public class RLJoinOrderRule extends RelOptRule {
     zmq.waitForClientTill("step");
     if (zmq.reset) {
       // TODO: put this option in QueryGraph.
-      edgeOrdinal = ThreadLocalRandom.current().nextInt(0, unusedEdges.size());
+      edgeOrdinal = ThreadLocalRandom.current().nextInt(0, queryGraph.edges.size());
     } else {
       edgeOrdinal = zmq.nextAction;
     }
     joinOrderSeq.add(edgeOrdinal);
     zmq.joinOrderSeq = joinOrderSeq;
-    final QueryGraph.Edge bestEdge = unusedEdges.get(edgeOrdinal);
+    final QueryGraph.Edge bestEdge = queryGraph.edges.get(edgeOrdinal);
 
     // For now, assume that the edge is between precisely two factors.
     // 1-factor conditions have probably been pushed down,

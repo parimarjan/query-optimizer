@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.*;
 import java.util.*;
 
+// FIXME: replace all usage of sqlQuery + caching to use Query object, and
+// caching old values will be handled by it.
 public class ZeroMQServer {
 
   boolean verbose;
@@ -27,16 +29,9 @@ public class ZeroMQServer {
   public int episodeDone = 0;
   public double lastReward = 0;
   public double lastTrueReward = 0;
-  public String query = "";
+  // FIXME: ensure that this must be set before the episode begins.
+  public String sqlQuery = "";
   public Serializable actions;
-
-  public HashMap<String, HashMap<String, String>> optimizedPlans = new
-                                            HashMap<String, HashMap<String, String>>();
-  public HashMap<String, HashMap<String, Double>> optimizedCosts = new
-                                            HashMap<String, HashMap<String, Double>>();
-  //public HashMap<String, Double> optimizedCosts = new HashMap<String, Double>();
-  private String BASE_COSTS_FILE_NAME = "optCosts.ser";
-  private String COSTS_FILE_NAME;
 
   public ArrayList<Integer> curQuerySet;
   public ArrayList<Integer> joinOrderSeq = new ArrayList<Integer>();
@@ -53,59 +48,11 @@ public class ZeroMQServer {
    *    - FIXME: this should be separated out into a new query stats module
    */
   public ZeroMQServer(int port, boolean verbose) {
-    COSTS_FILE_NAME = QueryOptExperiment.getCostModelName() + BASE_COSTS_FILE_NAME;
     this.port = Integer.toString(port);
     context = ZMQ.context(1);
     responder = context.socket(ZMQ.PAIR);
     responder.bind("tcp://*:" + this.port);
     this.verbose = verbose;
-    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
-    if (oldCosts != null) {
-      optimizedCosts = oldCosts;
-      System.out.println("initializing saved costs ...");
-      System.out.println("number of queries with saved costs: " + optimizedCosts.size());
-    }
-  }
-
-  // Hacky interface for loading / saving costs so we don't have to recompute
-  // every time. Particularly useful for expensive planners (ExhaustiveSearch)
-  // FIXME: make these general purpose
-  public void saveUpdatedCosts() {
-    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCosts();
-    HashMap<String, HashMap<String, Double>> newCosts = new HashMap<String, HashMap<String, Double>>();
-    if (oldCosts != null){
-      // ignore this guy, file probably didn't exist.
-      newCosts.putAll(oldCosts);
-    }
-    newCosts.putAll(optimizedCosts);
-    saveCosts(newCosts);
-  }
-
-  public void saveCosts(Serializable obj)
-  {
-		try {
-			ObjectOutputStream oos = new ObjectOutputStream(
-							new FileOutputStream(COSTS_FILE_NAME)
-			);
-			oos.writeObject(obj);
-			oos.flush();
-			oos.close();
-		} catch (Exception e) {
-			System.out.println(e);
-		}
-  }
-
-  public Serializable loadCosts() {
-    try {
-      FileInputStream fis = new FileInputStream(COSTS_FILE_NAME);
-      ObjectInputStream ois = new ObjectInputStream(fis);
-      HashMap<String, HashMap<String, Double>> costs = (HashMap) ois.readObject();
-      ois.close();
-      return costs;
-    } catch (Exception e) {
-      System.out.println(e);
-    }
-    return null;
   }
 
   /* The main routine which handles communication with the Python client.
@@ -174,27 +121,26 @@ public class ZeroMQServer {
         END = true;
         resp = "";
         break;
+      // FIXME: better name. getEpisodeCost?
       case "getJoinsCost":
         resp = 0.00;
         responder.send(resp.toString());
         request = responder.recv(0);
         plannerName = new String(request);
-        Double totalCost = 0.00;
-        if (optimizedCosts.get(query) == null) {
-          // query hasn't been seen yet, we'll just return 0.00
-          break;
-        } else {
-          totalCost = optimizedCosts.get(query).get(plannerName);
-        }
+        //Double totalCost = 0.00;
+        Query curQuery = QueryOptExperiment.getCurrentQuery();
+        Double totalCost = curQuery.costs.get(plannerName);
         if (totalCost == null) {
-            break;
+          // query hasn't been seen yet, we'll just return 0.00
+          resp = 0.00;
+          break;
         }
-        if (verbose) System.out.println("totalCost was not null!");
         resp = (Serializable) (totalCost);
         break;
       case "getCurQuerySet":
         resp = curQuerySet;
         break;
+      // FIXME: get this to work
       case "getOptPlan":
         if (verbose) System.out.println("getOptPlan");
         resp = "";
@@ -202,8 +148,6 @@ public class ZeroMQServer {
         request = responder.recv(0);
         plannerName = new String(request);
         if (verbose) System.out.println("plannerName = " + plannerName);
-        //resp = optimizedPlans.get(query).get(plannerName);
-        //if (resp == null) resp = "";
         break;
       case "getAttrCount":
         resp = DbInfo.attrCount;
@@ -213,7 +157,7 @@ public class ZeroMQServer {
         resp = "";
         break;
       case "curQuery":
-        resp = query;
+        resp = sqlQuery;
         break;
       case "getActions":
         resp = actions;

@@ -7,13 +7,15 @@ import org.apache.commons.cli.*;
 
 class Main {
 
+  // FIXME: this should not be required.
   private static Option newOption(String option, String helper) {
     Option opt = new Option(option, true, helper);
     opt.setRequired(false);
     return opt;
   }
 
-  private static CommandLine parseArgs(String[] args) {
+  private static CommandLine parseArgs(String[] args)
+  {
     Options options = new Options();
     options.addOption(newOption("port", "port number for zmq server"));
     options.addOption(newOption("query", "query number to run"));
@@ -24,7 +26,7 @@ class Main {
     options.addOption(newOption("leftDeep", "use dynamic programming based left deep search planner or not"));
     options.addOption(newOption("verbose", "use exhaustive search planner or not"));
     options.addOption(newOption("train", ""));
-    options.addOption(newOption("executeOnDB", "execute on DB or not"));
+    options.addOption(newOption("runtimeReward", "base final reward on runtime"));
     options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
     options.addOption(newOption("dataset", "which dataset to use"));
 
@@ -70,10 +72,13 @@ class Main {
     }
   }
 
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] args) throws Exception
+  {
     CommandLine cmd = parseArgs(args);
     Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query", "0"));
     Integer port = Integer.parseInt(cmd.getOptionValue("port", "5555"));
+
+    /// FIXME: handle booleans correctly
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);
     boolean lopt = (Integer.parseInt(cmd.getOptionValue("lopt", "1")) == 1);
     boolean python = (Integer.parseInt(cmd.getOptionValue("python", "1")) == 1);
@@ -82,27 +87,26 @@ class Main {
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
 
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
-    boolean executeOnDB = (Integer.parseInt(cmd.getOptionValue("executeOnDB", "0")) == 1);
+
     String costModel = cmd.getOptionValue("costModel", "");
-    // FIXME: temporary
-    if (costModel.equals("rowCount")) {
-      costModel = "";
-    }
+    //boolean runtimeReward = cmd.hasOption("runtimeReward");
+    boolean runtimeReward = (Integer.parseInt(cmd.getOptionValue("runtimeReward", "0")) == 1);
+
     String dataset = cmd.getOptionValue("dataset", "JOB");
 
     // FIXME: helper utility to just print out all the options?
     System.out.println("using zmq port " + port);
-    System.out.println("onlyFinalReward " + onlyFinalReward);
-    System.out.println("boolean onlyFinalReward " + (onlyFinalReward));
+    System.out.println("onlyFinalReward " + (onlyFinalReward));
     System.out.println("LOpt " + lopt);
     System.out.println("python " + python);
     System.out.println("exhaustive " + exhaustive);
     System.out.println("left deep search " + leftDeep);
     System.out.println("costModel " + costModel);
-    System.out.println("executeOnDB " + executeOnDB);
     System.out.println("dataset " + dataset);
     System.out.println("train " + train);
+    System.out.println("runtimeReward " + runtimeReward);
 
+    // FIXME: this should be part of the params interface as well.
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
     if (exhaustive) {
       plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.EXHAUSTIVE);
@@ -121,8 +125,8 @@ class Main {
 
     QueryOptExperiment exp = null;
     String dbUrl = "jdbc:calcite:model=pg-schema.json";
+    // FIXME: simple test for monetdb stuff
     //String dbUrl = "jdbc:calcite:model=monetdb-schema.json";
-
     //Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
     //try {
         //String con_url = "jdbc:monetdb://localhost:50000/my-first-db";
@@ -132,18 +136,18 @@ class Main {
     //}
     //System.out.println("succeeded in creating connection with monetDB!!");
 
+    QueryOptExperiment.Params params = new QueryOptExperiment.Params();
+    params.runtimeReward = runtimeReward;
+    params.onlyFinalReward = onlyFinalReward;
+    params.dbUrl = dbUrl;
+
     try {
-        exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, onlyFinalReward, verbose, train, costModel, executeOnDB);
+        exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, verbose, train, costModel, params);
     } catch (Exception e) {
-        System.err.println("Sql Exception!");
         throw e;
     }
     ArrayList<Integer> queries = new ArrayList<Integer>();
     updateQueries(nextQuery, queries);
-    //for (Integer i : queries) {
-      //System.out.println(i);
-      //System.out.println(exp.allSqlQueries.get(i));
-    //}
     QueryOptExperiment.getZMQServer().curQuerySet = queries;
     exp.train(queries);
   }

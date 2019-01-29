@@ -65,8 +65,9 @@ public class MyMetadataQuery extends RelMetadataQuery {
   public Double getRowCount(RelNode rel) {
     //System.out.println("getRowCount, node is type: " + rel.getClass().getName());
     // FIXME: error checking needs to be done here!!!!
-    String query = QueryOptExperiment.getCurrentQuery();
-    HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(query);
+    Query query = QueryOptExperiment.getCurrentQuery();
+    String sqlQuery = query.sql;
+    HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
     if (curQueryMap == null) return super.getRowCount(rel);
     if (rel instanceof Filter || rel instanceof TableScan) {
       String tableName = MyUtils.getTableName(rel);
@@ -113,7 +114,13 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
 	@Override
   public RelOptCost getCumulativeCost(RelNode rel) {
-    if (rel instanceof Join && !COST_MODEL_NAME.equals("")) {
+    if (COST_MODEL_NAME.equals("rowCount")) {
+      // FIXME: is this actually just rowCount w/o any modifications?
+      RelOptCost origCost = super.getCumulativeCost(rel);
+      return origCost;
+    }
+
+    if (rel instanceof Join) {
       RelNode left = ((Join) rel).getLeft();
       RelNode right = ((Join) rel).getRight();
       RelOptCost leftCost = getCumulativeCost(left);

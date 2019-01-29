@@ -42,8 +42,6 @@ public class LeftDeepJoinOrderRule extends RelOptRule
   public static final LeftDeepJoinOrderRule INSTANCE =
       new LeftDeepJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
-  //private LoptMultiJoin multiJoin;
-  //private MyMetadataQuery mq;
   // The keys represent a set of factors in the original vertices of the
   // QueryGraph. The values represent a sequence of edges (it's index at each
   // stage in QueryGraph.edges) that are chosen for the optimal memoized
