@@ -101,8 +101,14 @@ public class ZeroMQServer {
     // this will be set to true ONLY after reset has been called.
     reset = false;
     String plannerName;
+    Query curQuery;
     switch (msg)
     {
+      case "getQueryInfo":
+        // e.g., at the end of the episode
+        curQuery = QueryOptExperiment.getCurrentQuery();
+        resp = curQuery.toJson();
+        break;
       // park API based commands
       case "getQueryGraph":
         // First send the vertexes, then the edges
@@ -128,7 +134,7 @@ public class ZeroMQServer {
         request = responder.recv(0);
         plannerName = new String(request);
         //Double totalCost = 0.00;
-        Query curQuery = QueryOptExperiment.getCurrentQuery();
+        curQuery = QueryOptExperiment.getCurrentQuery();
         Double totalCost = curQuery.costs.get(plannerName);
         if (totalCost == null) {
           // query hasn't been seen yet, we'll just return 0.00

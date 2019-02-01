@@ -71,7 +71,6 @@ public class RLJoinOrderRule extends RelOptRule {
 
   private final PrintWriter pw = null;
   //private boolean params.onlyFinalReward;
-  private ArrayList<Integer> joinOrderSeq;
 
   /** Creates an RLJoinOrderRule. */
   public RLJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -87,7 +86,6 @@ public class RLJoinOrderRule extends RelOptRule {
   @Override
   public void onMatch(RelOptRuleCall call)
   {
-    joinOrderSeq = new ArrayList<Integer>();
     // setting original expression's importance to 0
     RelNode orig = call.getRelList().get(0);
     call.getPlanner().setImportance(orig, 0.0);
@@ -111,11 +109,15 @@ public class RLJoinOrderRule extends RelOptRule {
     // only used for finalReward scenario
     Double costSoFar = 0.00;
     zmq.episodeDone = 0;
+    Query curQuery = QueryOptExperiment.getCurrentQuery();
+    // replace whatever was there before
+    curQuery.joinOrders.put("RL", new ArrayList<int[]>());
+
     for (;;) {
       // break condition
       final int[] factors = chooseNextEdge(queryGraph);
       if (factors == null) break;
-
+      curQuery.joinOrders.get("RL").add(factors);
       double cost = queryGraph.updateGraph(factors);
       if (queryGraph.edges.size() == 0) zmq.episodeDone = 1;
 
@@ -155,28 +157,6 @@ public class RLJoinOrderRule extends RelOptRule {
     call.transformTo(optNode);
   }
 
-  // FIXME: should be part of the QueryGraph interface as well.
-  private void trace(List<QueryGraph.Vertex> vertexes,
-      List<QueryGraph.Edge> unusedEdges, List<QueryGraph.Edge> usedEdges,
-      int edgeOrdinal, PrintWriter pw)
-  {
-    pw.println("bestEdge: " + edgeOrdinal);
-    pw.println("vertexes:");
-    for (QueryGraph.Vertex vertex : vertexes) {
-      pw.println(vertex);
-    }
-    pw.println("unused edges:");
-    for (QueryGraph.Edge edge : unusedEdges) {
-      pw.println(edge);
-    }
-    pw.println("edges:");
-    for (QueryGraph.Edge edge : usedEdges) {
-      pw.println(edge);
-    }
-    pw.println();
-    pw.flush();
-  }
-
   /*
    * Passes control to the python agent to choose the next edge.
    * @ret: factors associated with the chosen edge
@@ -204,8 +184,6 @@ public class RLJoinOrderRule extends RelOptRule {
     } else {
       edgeOrdinal = zmq.nextAction;
     }
-    joinOrderSeq.add(edgeOrdinal);
-    zmq.joinOrderSeq = joinOrderSeq;
     final QueryGraph.Edge bestEdge = queryGraph.edges.get(edgeOrdinal);
 
     // For now, assume that the edge is between precisely two factors.

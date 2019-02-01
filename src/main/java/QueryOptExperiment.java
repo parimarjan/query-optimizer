@@ -270,7 +270,6 @@ public class QueryOptExperiment {
         nextQuery = (nextQuery + 1) % queries.size();
       }
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
-      System.out.println("nextQuery is: " + nextQuery);
       // FIXME: simplify this
       Query query = allSqlQueries.get(queries.get(nextQuery));
       String sqlQuery = query.sql;

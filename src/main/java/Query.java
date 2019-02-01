@@ -1,6 +1,7 @@
 import java.util.*;
 import java.io.*;
 import org.apache.commons.io.FileUtils;
+import com.google.gson.Gson;
 
 public class Query {
 
@@ -10,7 +11,7 @@ public class Query {
   // FIXME: maybe instead of having a million maps, we just have a queryPlanner
   // object which keeps track of all this??
   public HashMap<String, Double> costs;
-  public HashMap<String, List<Integer>> joinOrders;
+  public HashMap<String, List<int[]>> joinOrders;
   public HashMap<String, Long> planningTimes;
   //public HashMap<String, String> plans;
   public HashMap<String, Integer> resultVerifier;
@@ -30,10 +31,15 @@ public class Query {
     // initialize all the guys
     resultVerifier = new HashMap<String, Integer>();
     //plans = new HashMap<String, String>();
-    joinOrders = new HashMap<String, List<Integer>>();
+    joinOrders = new HashMap<String, List<int[]>>();
     costs = new HashMap<String, Double>();
     planningTimes = new HashMap<String, Long>();
     dbmsRuntimes = new HashMap<String, Long>();
+  }
+
+  public String toJson() {
+    Gson gson = new Gson();
+    return gson.toJson(this);
   }
 
   private String queryRewriteForCalcite(String query) {
