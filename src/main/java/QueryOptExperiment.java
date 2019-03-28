@@ -4,7 +4,6 @@ import org.apache.calcite.rel.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.tools.*;
-import java.io.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.*;
 import org.apache.calcite.adapter.enumerable.*;
@@ -19,6 +18,7 @@ import org.apache.calcite.adapter.jdbc.JdbcSchema;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.commons.io.FileUtils;
+import java.io.File;
 import java.util.concurrent.ThreadLocalRandom;
 
 // experimental:
@@ -147,9 +147,9 @@ public class QueryOptExperiment {
     public boolean onlyFinalReward = false;
     public boolean runtimeReward = false;
     public boolean verifyResults = false;
-    public boolean recomputeFixedPlanners = false;
+    public boolean recomputeFixedPlanners = true;
     public Long maxExecutionTime = 50000L;
-
+    public boolean python = true;
     public String dbUrl = "";
 
     public Params() {
@@ -169,8 +169,10 @@ public class QueryOptExperiment {
   //private static boolean onlyFinalReward;
   private static boolean verbose;
   private static boolean train;
-
   private static Query currentQuery;
+
+  public ArrayList<Integer> trainQueries;
+  public ArrayList<Integer> testQueries;
 
   /*
   *************************************************************************
@@ -227,6 +229,11 @@ public class QueryOptExperiment {
     }
   }
 
+  // static setter functions
+  public static void setTrainMode(boolean mode) {
+    train = mode;
+  }
+
   // static getter functions.
   // FIXME: explain why we have so many of these
   public static String getCostModelName() {
@@ -252,22 +259,34 @@ public class QueryOptExperiment {
   /* FIXME: finalize queries semantics AND write explanation.
    * FIXME: used for both train and test, change name to reflect that.
    */
-  public void train(ArrayList<Integer> queries) throws Exception
+  public void start() throws Exception
   {
     // we will treat queries as a pool of sample data. After every reset, we
     // choose a new
     int numSuccessfulQueries = 0;
     int numFailedQueries = 0;
-    zmq.curQuerySet = queries;
+    // probably don't need this line
+    // zmq.curQuerySet = queries;
+    //
     // start a server, and wait for a command.
-    zmq.waitForClientTill("getAttrCount");
+    if (params.python) zmq.waitForClientTill("getAttrCount");
     int nextQuery = -1;
+    ArrayList<Integer> queries;
+    boolean alreadyTesting = false;
     while (true) {
-      zmq.waitForClientTill("reset");
+      if (params.python) zmq.waitForClientTill("reset");
       if (train ) {
+        alreadyTesting = false;
+        queries = trainQueries;
         nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
       } else {
-        nextQuery = (nextQuery + 1) % queries.size();
+        queries = testQueries;
+        if (alreadyTesting) {
+          nextQuery = (nextQuery + 1) % queries.size();
+        } else {
+          nextQuery = 0;
+          alreadyTesting = true;
+        }
       }
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
       // FIXME: simplify this
@@ -276,6 +295,10 @@ public class QueryOptExperiment {
       currentQuery = query;
       zmq.sqlQuery = sqlQuery;
       if (zmq.END) break;
+      if (volcanoPlanners.size() == 0) {
+        System.out.println("no planners specified");
+        break;
+      }
       zmq.reset = false;
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
@@ -333,6 +356,7 @@ public class QueryOptExperiment {
       return false;
       //System.exit(-1);
     }
+
     DbInfo.setCurrentQueryVisibleFeatures(node);
     // testing if features were set correctly
     MyMetadataQuery mq = MyMetadataQuery.instance();
@@ -358,8 +382,6 @@ public class QueryOptExperiment {
       if (verbose) System.out.println("planning time: " +
           planningTime);
       // FIXME: need to use our MetaDataProvider in dumpPlan
-      //String optPlan = RelOptUtil.dumpPlan("", optimizedNode,
-          //SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
       RelOptCost optCost = computeCost(mq, optimizedNode);
       if (verbose) System.out.println("optimized cost for " + plannerName
           + " is: " + optCost);
@@ -370,6 +392,7 @@ public class QueryOptExperiment {
         System.out.println("going to execute " + plannerName);
         MyUtils.ExecutionResult result = MyUtils.executeNode(optimizedNode, false);
         if (result == null) {
+          System.out.println("runtime execution failed!");
           // what should we do here? trying to re-execute the query seems to
           // run into the same error.
           // For now, just treat it as MAX_EXECUTION TIME
@@ -439,7 +462,6 @@ public class QueryOptExperiment {
       RelRunner runner = curConn.unwrap(RelRunner.class);
       ps = runner.prepare(node);
       long start = System.currentTimeMillis();
-      //System.out.println("executing node");
       res = ps.executeQuery();
       long end = System.currentTimeMillis();
       long total = end - start;

@@ -112,20 +112,26 @@ public class MyUtils {
     CalciteConnection curConn = null;
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
 
+    //Class.forName("org.postgresql.Driver");
+    //org.postgresql.Driver.setLogLevel(org.postgresql.Driver.DEBUG);
+
     try {
       curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
       // FIXME: or do this? Will need to get conn from QueryOptExperiment
       //curConn = conn;
       //System.out.println("in execute node!");
       //System.out.println("nodeToString:\n " + RelOptUtil.toString(node));
+      curConn.setAutoCommit(true);
       RelRunner runner = curConn.unwrap(RelRunner.class);
       System.out.println("after curConn.unwrap!");
       ps = runner.prepare(node);
+      //ps.setQueryTimeout(100);
       System.out.println(ps);
-      //ps.setQueryTimeout(10);
+      ps.setQueryTimeout(1000000);
       long start = System.currentTimeMillis();
       System.out.println("executing node");
       rs = ps.executeQuery();
+      if (true) return null;
       long end = System.currentTimeMillis();
       runtime = end - start;
       System.out.println("execution time: " + runtime);

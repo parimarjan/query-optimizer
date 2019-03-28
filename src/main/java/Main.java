@@ -45,7 +45,9 @@ class Main {
     return cmd;
   }
 
-  private static void updateQueries(int nextQuery, ArrayList<Integer> queries) {
+  private static void updateQueries(int nextQuery, ArrayList<Integer> trainQueries,
+      ArrayList<Integer> testQueries)
+ {
     System.out.println("***************************");
     System.out.println("running query " + nextQuery);
     System.out.println("***************************");
@@ -53,22 +55,28 @@ class Main {
       // even version
       for (int i = 0; i < 113; i++) {
         if (i % 2 == 0) {
-          queries.add(i);
+          trainQueries.add(i);
+        } else {
+          testQueries.add(i);
         }
       }
     } else if (nextQuery == -2) {
         // odd version
         for (int i = 0; i < 113; i++) {
           if (i % 2 != 0) {
-            queries.add(i);
+            trainQueries.add(i);
+          } else {
+            testQueries.add(i);
           }
         }
     } else if (nextQuery == -3) {
       for (int i = 0; i < 113; i++) {
-          queries.add(i);
+        trainQueries.add(i);
+        testQueries.add(i);
       }
     } else {
-      queries.add(nextQuery);
+      trainQueries.add(nextQuery);
+      testQueries.add(nextQuery);
     }
   }
 
@@ -140,16 +148,23 @@ class Main {
     params.runtimeReward = runtimeReward;
     params.onlyFinalReward = onlyFinalReward;
     params.dbUrl = dbUrl;
+    params.python = python;
 
     try {
         exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, verbose, train, costModel, params);
     } catch (Exception e) {
         throw e;
     }
-    ArrayList<Integer> queries = new ArrayList<Integer>();
-    updateQueries(nextQuery, queries);
-    QueryOptExperiment.getZMQServer().curQuerySet = queries;
-    exp.train(queries);
+
+    ArrayList<Integer> trainQueries = new ArrayList<Integer>();
+    ArrayList<Integer> testQueries = new ArrayList<Integer>();
+
+    updateQueries(nextQuery, trainQueries, testQueries);
+
+    QueryOptExperiment.getZMQServer().curQuerySet = trainQueries;
+    exp.trainQueries = trainQueries;
+    exp.testQueries = testQueries;
+    exp.start();
   }
 }
 

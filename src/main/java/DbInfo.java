@@ -28,6 +28,7 @@ public class DbInfo {
     attrCount = 0;
     while (tables.next()) {
       String tableName = tables.getString(3);
+      System.out.println(tableName);
       tableFeaturesOffsetMap.put(tableName, attrCount);
       /* count all the attributes of this table */
       ResultSet attrs = md.getColumns(null, null, tableName, "%");
@@ -35,6 +36,7 @@ public class DbInfo {
         attrCount += 1;
       }
     }
+    System.out.println("final attr count: " + attrCount);
   }
 
   /* Need these are public getters so we can call them as

@@ -104,6 +104,14 @@ public class ZeroMQServer {
     Query curQuery;
     switch (msg)
     {
+      case "test":
+        QueryOptExperiment.setTrainMode(false);
+        resp = "";
+        break;
+      case "train":
+        QueryOptExperiment.setTrainMode(true);
+        resp = "";
+        break;
       case "getQueryInfo":
         // e.g., at the end of the episode
         curQuery = QueryOptExperiment.getCurrentQuery();

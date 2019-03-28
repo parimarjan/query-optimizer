@@ -78,7 +78,6 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
   @Override
   public void onMatch(RelOptRuleCall call)
   {
-    //System.out.println("onMatch Exhaustive");
     RelNode orig = call.getRelList().get(0);
     call.getPlanner().setImportance(orig, 0.0);
     //memoizedBestJoins = new HashMap<ImmutableBitSet, ArrayList<ImmutableBitSet[]>>();
@@ -98,16 +97,11 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       ImmutableBitSet S1 = curPair[0];
       ImmutableBitSet S2 = curPair[1];
       ImmutableBitSet S = S1.union(S2);
-      //System.out.println("S1: " + S1);
-      //System.out.println("S2: " + S2);
       ArrayList<ImmutableBitSet[]> p1 = memoizedBestJoins.get(S1).bestJoins;
       ArrayList<ImmutableBitSet[]> p2 = memoizedBestJoins.get(S2).bestJoins;
       assert p1 != null;
       assert p2 != null;
       QueryGraph curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-      //System.out.println(S1);
-      //System.out.println(S2);
-      //System.out.println(S);
 
       // NOTE: S1, and S2, are two subgraphs with no common elements. So we can
       // execute the optimal ordering for those (p1, and p2) in either order,
