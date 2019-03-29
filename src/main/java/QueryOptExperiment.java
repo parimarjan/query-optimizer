@@ -198,6 +198,9 @@ public class QueryOptExperiment {
     //this.onlyFinalReward = onlyFinalReward;
     this.verbose = verbose;
     this.dbUrl = dbUrl;
+    // user, password does not seem to be required if it isn't explictly set in
+    // the db
+    //this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl, "bobTheCat", "");
     this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
     DbInfo.init(conn);
     this.zmq = new ZeroMQServer(port, verbose);
@@ -218,6 +221,8 @@ public class QueryOptExperiment {
     File[] listOfFiles = dir.listFiles();
     for (File f : listOfFiles) {
       // FIXME: use regex to avoid index files etc.
+      String fn = f.getName();
+      if (fn.contains("fk") || fn.contains("schema")) continue;
       if (f.getName().contains(".sql")) {
         try {
           Query q = new Query(f);
@@ -480,7 +485,9 @@ public class QueryOptExperiment {
       System.out.println("caught exception while trying to find cardinality of subquery");
       System.out.println(e);
       e.printStackTrace();
-      System.exit(-1);
+      //System.exit(-1);
+      // FIXME: temp.
+      return 100.00;
     }
     try {
       ps.close();
@@ -489,7 +496,9 @@ public class QueryOptExperiment {
       System.out.println(e);
       e.printStackTrace();
       // no good way to handle this (?)
-      System.exit(-1);
+      //System.exit(-1);
+      // FIXME: temp.
+      return 100.00;
     }
     if (verbose) System.out.println("true cardinality was: " + cardinality);
     return cardinality;
