@@ -26,7 +26,7 @@ class Main {
     options.addOption(newOption("leftDeep", "use dynamic programming based left deep search planner or not"));
     options.addOption(newOption("verbose", "use exhaustive search planner or not"));
     options.addOption(newOption("train", ""));
-    options.addOption(newOption("runtimeReward", "base final reward on runtime"));
+    options.addOption(newOption("execOnDB", "base final reward on runtime"));
     options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
     options.addOption(newOption("dataset", "which dataset to use"));
 
@@ -97,8 +97,8 @@ class Main {
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
 
     String costModel = cmd.getOptionValue("costModel", "");
-    //boolean runtimeReward = cmd.hasOption("runtimeReward");
-    boolean runtimeReward = (Integer.parseInt(cmd.getOptionValue("runtimeReward", "0")) == 1);
+    //boolean execOnDB = cmd.hasOption("execOnDB");
+    boolean execOnDB = (Integer.parseInt(cmd.getOptionValue("execOnDB", "0")) == 1);
 
     String dataset = cmd.getOptionValue("dataset", "JOB");
 
@@ -112,7 +112,7 @@ class Main {
     System.out.println("costModel " + costModel);
     System.out.println("dataset " + dataset);
     System.out.println("train " + train);
-    System.out.println("runtimeReward " + runtimeReward);
+    System.out.println("execOnDB " + execOnDB);
 
     // FIXME: this should be part of the params interface as well.
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
@@ -133,20 +133,9 @@ class Main {
 
     QueryOptExperiment exp = null;
     String dbUrl = "jdbc:calcite:model=pg-schema.json";
-    // FIXME: simple test for monetdb stuff
-    //String dbUrl = "jdbc:calcite:model=monetdb-schema.json";
-    //Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
-    //try {
-        //String con_url = "jdbc:monetdb://localhost:50000/my-first-db";
-        //Connection con = DriverManager.getConnection(con_url, "monetdb", "monetdb");
-    //} catch (Exception e) {
-      //throw e;
-    //}
-    //System.out.println("succeeded in creating connection with monetDB!!");
 
     QueryOptExperiment.Params params = new QueryOptExperiment.Params();
-    params.runtimeReward = runtimeReward;
-    params.onlyFinalReward = onlyFinalReward;
+    params.execOnDB = execOnDB;
     params.dbUrl = dbUrl;
     params.python = python;
 

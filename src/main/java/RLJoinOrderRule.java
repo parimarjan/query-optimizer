@@ -70,7 +70,6 @@ public class RLJoinOrderRule extends RelOptRule {
       new RLJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
   private final PrintWriter pw = null;
-  //private boolean params.onlyFinalReward;
 
   /** Creates an RLJoinOrderRule. */
   public RLJoinOrderRule(RelBuilderFactory relBuilderFactory) {
@@ -123,29 +122,8 @@ public class RLJoinOrderRule extends RelOptRule {
 
       // FIXME: onlyFinalReward is pretty hacky right now...
       costSoFar += cost;    // only required for onlyFinalReward
-      if (!params.onlyFinalReward) {
-        zmq.lastReward = -cost;
-      } else if (params.onlyFinalReward && !params.runtimeReward) {
-        // here, the final reward will be the sum of all intermediate rewards.
-        zmq.lastTrueReward = -cost;
-        if (queryGraph.edges.size() == 0) {
-          zmq.lastReward = -costSoFar;
-        } else {
-          zmq.lastReward = 0.00;
-        }
-      } else if (params.onlyFinalReward && params.runtimeReward) {
-        zmq.lastReward = 0.00;
-      }
-      // if onlyFinalReward && params.runtimeReward, then we can ignore all the
-      // lastTrueReward etc. stuff.
-
-      // We do not want to wait for getReward here if runtimeReward is set,
-      // AND the episode is over. Then, the final reward will be set after
-      // the planning is complete. Every other situation, we will stop and wait
-      // here.
-      if (!(params.runtimeReward && (zmq.episodeDone==1))) {
-        zmq.waitForClientTill("getReward");
-      }
+      zmq.lastReward = -cost;
+      zmq.waitForClientTill("getReward");
     }
 
     /// FIXME: need to understand what this TargetMapping business really is...

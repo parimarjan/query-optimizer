@@ -142,15 +142,17 @@ public class QueryOptExperiment {
     // initalize these with their default values incase someone doesn't supply
     // them
 
-    // If runtimeReward is false, and onlyFinalReward is true, then we will
+    // If execOnDB is false, and onlyFinalReward is true, then we will
     // treat the final reward as a sum of all the intermediate rewards.
-    public boolean onlyFinalReward = false;
-    public boolean runtimeReward = false;
+    //public boolean onlyFinalReward = false;
+    public boolean execOnDB = false;
     public boolean verifyResults = false;
     public boolean recomputeFixedPlanners = true;
     public Long maxExecutionTime = 50000L;
     public boolean python = true;
     public String dbUrl = "";
+    // clear cache after every execution
+    public boolean clearCache = true;
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -195,7 +197,6 @@ public class QueryOptExperiment {
     // FIXME: make this as a variable arg.
     this.train = train;
     this.costModelName = costModelName;
-    //this.onlyFinalReward = onlyFinalReward;
     this.verbose = verbose;
     this.dbUrl = dbUrl;
     // user, password does not seem to be required if it isn't explictly set in
@@ -280,10 +281,12 @@ public class QueryOptExperiment {
     boolean alreadyTesting = false;
     while (true) {
       if (params.python) zmq.waitForClientTill("reset");
-      if (train ) {
+      if (train) {
         alreadyTesting = false;
         queries = trainQueries;
-        nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        //nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
+        // FIXME: is deterministic order ok always?
+        nextQuery = (nextQuery + 1) % queries.size();
       } else {
         queries = testQueries;
         if (alreadyTesting) {
@@ -369,7 +372,7 @@ public class QueryOptExperiment {
     // mysterious reasons
     RelTraitSet traitSet =
       planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
-    if (params.runtimeReward) {
+    if (params.execOnDB) {
       // FIXME: in the future, do not rerun.
       // run unoptimized node
       //System.out.println("GOING TO EXECUTE WITH ORIGINAL NODE");
@@ -393,8 +396,10 @@ public class QueryOptExperiment {
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
-      if (params.runtimeReward) {
+      if (params.execOnDB) {
+        // TODO: maybe we don't want to keep re-executing all planners?
         System.out.println("going to execute " + plannerName);
+        // FIXME: add the MAX-EXECUTION-TIME timeout to this
         MyUtils.ExecutionResult result = MyUtils.executeNode(optimizedNode, false);
         if (result == null) {
           System.out.println("runtime execution failed!");
@@ -412,10 +417,12 @@ public class QueryOptExperiment {
           query.resultVerifier.put(plannerName, result.resultHashCode);
         }
         if (plannerName.equals("RL")) {
-          // if RL, then update the rewards
-          zmq.lastReward = -result.runtime;
-          zmq.waitForClientTill("getReward");
+          // Don't need to set this anywhere as it will be part of the
+          // queryInfo structure.
+          //zmq.runtime = result.runtime;
+          zmq.waitForClientTill("getQueryInfo");
         }
+        // TODO: clear the caches!
       }
       // FIXME: save the updated costs to disk, or NOT?
     } catch (Exception e) {

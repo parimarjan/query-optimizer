@@ -104,13 +104,62 @@ public class MyUtils {
    */
   public static ExecutionResult executeNode(RelNode node, boolean getTrueCardinality)
   {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+		if (params.clearCache) {
+      //String cmd = "sudo sh -c \"echo 3 > /proc/sys/vm/drop_caches\"";
+      System.out.println("going to run test.sh!");
+      //String cmd = "sudo sh -c -S /home/pari/query-optimizer/test.sh";
+      String cmd = "/home/pari/query-optimizer/test.sh";
+      //String cmd = "sh -c ls";
+      try {
+
+				ProcessBuilder processBuilder = new ProcessBuilder(cmd);
+				//Sets the source and destination for subprocess standard I/O to be the same as those of the current Java process.
+				processBuilder.inheritIO();
+				Process process = processBuilder.start();
+        TimeUnit.SECONDS.sleep(2);
+        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+        out.write("1234\n");
+        //out.flush();
+
+				int exitValue = process.waitFor();
+				if (exitValue != 0) {
+						// check for errors
+						new BufferedInputStream(process.getErrorStream());
+						throw new RuntimeException("execution of script failed!");
+				}
+
+        //Process cmdProc = Runtime.getRuntime().exec(cmd);
+				//BufferedReader stdoutReader = new BufferedReader(
+								 //new InputStreamReader(cmdProc.getInputStream()));
+				//String line;
+				//while ((line = stdoutReader.readLine()) != null) {
+          //System.out.println(line);
+				//}
+
+				//BufferedReader stderrReader = new BufferedReader(
+								 //new InputStreamReader(cmdProc.getErrorStream()));
+				////String line;
+				//while ((line = stderrReader.readLine()) != null) {
+          //System.out.println(line);
+				//}
+
+				//cmdProc.waitFor();
+        //System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());
+      } catch (Exception e) {
+        System.out.println(e);
+        e.printStackTrace();
+        //System.out.println("clearing cache failed!");
+        System.exit(-1);
+      }
+    }
+
     /// FIXME: clean up all the resources at the end
     ResultSet rs = null;
     PreparedStatement ps = null;
     Integer resultHash = -1;
     Long runtime = -1L;
     CalciteConnection curConn = null;
-    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
 
     //Class.forName("org.postgresql.Driver");
     //org.postgresql.Driver.setLogLevel(org.postgresql.Driver.DEBUG);
@@ -126,12 +175,11 @@ public class MyUtils {
       System.out.println("after curConn.unwrap!");
       ps = runner.prepare(node);
       //ps.setQueryTimeout(100);
-      System.out.println(ps);
+      //System.out.println(ps);
       ps.setQueryTimeout(1000000);
       long start = System.currentTimeMillis();
       System.out.println("executing node");
       rs = ps.executeQuery();
-      if (true) return null;
       long end = System.currentTimeMillis();
       runtime = end - start;
       System.out.println("execution time: " + runtime);
@@ -151,6 +199,7 @@ public class MyUtils {
       return null;
       //System.exit(-1);
     }
+    System.out.println("execution DID NOT crash");
     ExecutionResult execResult;
     // this can be an expensive operation, so only do it if really needed.
     if (params.verifyResults || getTrueCardinality) {
@@ -174,6 +223,7 @@ public class MyUtils {
       // no good way to handle this (?)
       System.exit(-1);
     }
+    // clear cache
     return execResult;
   }
 
