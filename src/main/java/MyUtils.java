@@ -40,6 +40,32 @@ import java.util.concurrent.TimeUnit;
 
 public class MyUtils {
 
+  public static ArrayList<String> getAllTableNames(RelNode rel) {
+    if (rel == null) {
+      return null;
+    }
+    List<RelNode> inputs = rel.getInputs();
+    ArrayList<String> tableNames = new ArrayList<String>();
+    System.out.println("inputs.size = " + inputs.size());
+    //if (inputs.size() == 0) {
+      //System.out.println(rel);
+    //}
+    if (inputs.size() <= 1) {
+      //String curTable = getTableName(inputs.get(0));
+      System.out.println("rel: " + rel);
+      String curTable = getTableName(rel);
+      tableNames.add(curTable);
+    } else {
+      for (RelNode inp : inputs) {
+        ArrayList<String> curTables = getAllTableNames(inp);
+        if (curTables.size() >= 1) {
+          tableNames.addAll(curTables);
+        }
+      }
+    }
+    return tableNames;
+  }
+
   public static String getTableName(RelNode rel) {
     if (rel == null) {
       return null;
@@ -99,83 +125,107 @@ public class MyUtils {
     public Double trueCardinality = -1.00;
   }
 
-  /* @node: node to execute.
-   * @ret: ExecutionResult: ResultSet, ExecutionTime
-   */
-  public static ExecutionResult executeNode(RelNode node, boolean getTrueCardinality)
+  private static void clearCache()
   {
-    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
-		if (params.clearCache) {
-      //String cmd = "sudo sh -c \"echo 3 > /proc/sys/vm/drop_caches\"";
-      System.out.println("going to run test.sh!");
-      //String cmd = "sudo sh -c -S /home/pari/query-optimizer/test.sh";
-      String cmd = "/home/pari/query-optimizer/test.sh";
-      //String cmd = "sh -c ls";
+      System.out.println("clear cache...");
       try {
+        String cmd = "./test.sh";
+        Process cmdProc = Runtime.getRuntime().exec(cmd);
+        cmdProc.waitFor();
+        System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());
 
-				ProcessBuilder processBuilder = new ProcessBuilder(cmd);
-				//Sets the source and destination for subprocess standard I/O to be the same as those of the current Java process.
-				processBuilder.inheritIO();
-				Process process = processBuilder.start();
-        TimeUnit.SECONDS.sleep(2);
-        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-        out.write("1234\n");
-        //out.flush();
-
-				int exitValue = process.waitFor();
-				if (exitValue != 0) {
-						// check for errors
-						new BufferedInputStream(process.getErrorStream());
-						throw new RuntimeException("execution of script failed!");
-				}
-
-        //Process cmdProc = Runtime.getRuntime().exec(cmd);
-				//BufferedReader stdoutReader = new BufferedReader(
-								 //new InputStreamReader(cmdProc.getInputStream()));
-				//String line;
-				//while ((line = stdoutReader.readLine()) != null) {
-          //System.out.println(line);
-				//}
-
-				//BufferedReader stderrReader = new BufferedReader(
-								 //new InputStreamReader(cmdProc.getErrorStream()));
-				////String line;
-				//while ((line = stderrReader.readLine()) != null) {
-          //System.out.println(line);
-				//}
-
-				//cmdProc.waitFor();
-        //System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());
+        // doesn't seem to change anything if we sleep here or not.
+        //TimeUnit.SECONDS.sleep(60);
+        // dummy execution
       } catch (Exception e) {
-        System.out.println(e);
+        System.out.println("trying to drop cache failed miserably");
         e.printStackTrace();
-        //System.out.println("clearing cache failed!");
         System.exit(-1);
       }
+  }
+
+  /* Executes the given sql using plain old jdbc connection without calcite.
+   * Postgres would do its own usual set of optimizations etc.
+   */
+  public static ExecutionResult executeSql(String sql,
+                                           boolean getTrueCardinality,
+                                           boolean clearCache)
+  {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+		ExecutionResult execResult = null;
+    ResultSet rs = null;
+		Connection con = null;
+
+    if (clearCache) {
+        clearCache();
+    }
+    try {
+      Class.forName("org.postgresql.Driver");
+      con = DriverManager.getConnection(params.pgUrl, params.user,
+                                          params.pwd);
+			Statement stmt = con.createStatement();
+			//The query can be update query or can be select query
+			//String query = "select * from emp";
+      long start = System.currentTimeMillis();
+			boolean status = stmt.execute(sql);
+      long end = System.currentTimeMillis();
+      long runtime = end - start;
+      System.out.println("executeSql runtime: " + runtime);
+      rs = stmt.getResultSet();
+			// this can be an expensive operation, so only do it if really needed.
+			if (params.verifyResults || getTrueCardinality) {
+				execResult = getResultSetHash(rs);
+				execResult.runtime = runtime;
+			} else {
+				// default values
+				execResult = new ExecutionResult();
+				execResult.runtime = runtime;
+			}
+
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
     }
 
-    /// FIXME: clean up all the resources at the end
+    try {
+      con.close();
+      rs.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      // no good way to handle this (?)
+      System.exit(-1);
+    }
+
+    return execResult;
+  }
+
+  /* @node: node to execute.
+   * TODO: describe other params
+   * TODO: remove dependence on QueryOpt.Params
+   * @ret: ExecutionResult: ResultSet, ExecutionTime
+   */
+  public static ExecutionResult executeNode(RelNode node,
+                                            boolean getTrueCardinality,
+                                            boolean clearCache)
+  {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    if (clearCache) {
+        clearCache();
+        // dummy execution
+        executeNode(node, false, false);
+    }
     ResultSet rs = null;
     PreparedStatement ps = null;
     Integer resultHash = -1;
     Long runtime = -1L;
     CalciteConnection curConn = null;
-
-    //Class.forName("org.postgresql.Driver");
-    //org.postgresql.Driver.setLogLevel(org.postgresql.Driver.DEBUG);
+    ExecutionResult execResult = null;
 
     try {
       curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
-      // FIXME: or do this? Will need to get conn from QueryOptExperiment
-      //curConn = conn;
-      //System.out.println("in execute node!");
-      //System.out.println("nodeToString:\n " + RelOptUtil.toString(node));
       curConn.setAutoCommit(true);
       RelRunner runner = curConn.unwrap(RelRunner.class);
-      System.out.println("after curConn.unwrap!");
       ps = runner.prepare(node);
-      //ps.setQueryTimeout(100);
-      //System.out.println(ps);
       ps.setQueryTimeout(1000000);
       long start = System.currentTimeMillis();
       System.out.println("executing node");
@@ -183,32 +233,45 @@ public class MyUtils {
       long end = System.currentTimeMillis();
       runtime = end - start;
       System.out.println("execution time: " + runtime);
+
+			// this can be an expensive operation, so only do it if really needed.
+			if (params.verifyResults || getTrueCardinality) {
+				execResult = getResultSetHash(rs);
+				execResult.runtime = runtime;
+			} else {
+				// default values
+				execResult = new ExecutionResult();
+				execResult.runtime = runtime;
+			}
     } catch (Exception e) {
       System.out.println("caught exception while executing query");
-      System.out.println(e);
-      e.printStackTrace();
+      StringWriter errors = new StringWriter();
+      e.printStackTrace(new PrintWriter(errors));
+      String errorMsg = errors.toString();
+      // this error usually seems to happen in the execution attempt right
+      // after clearing cache
+      if (errorMsg.contains("administrator")) {
+        System.out.println("contains: admin");
+      }
+      // this seems to happen when Avatica decides to mysteriously send a
+      // cancelling by user request to psql (hypothesis: because it is taking
+      // too long...)
+      if (errorMsg.contains("user")) {
+        System.out.println("contains: user");
+      }
+
+      if (!errorMsg.contains("user") && !errorMsg.contains("administrator")) {
+        e.printStackTrace();
+      }
+
       try {
         curConn.close();
         ps.close();
       } catch (Exception e2) {
-        // ignore it?
-        System.out.println("caught second exception while executing query");
-        System.out.println(e2);
         e2.printStackTrace();
+        System.exit(-1);
       }
       return null;
-      //System.exit(-1);
-    }
-    System.out.println("execution DID NOT crash");
-    ExecutionResult execResult;
-    // this can be an expensive operation, so only do it if really needed.
-    if (params.verifyResults || getTrueCardinality) {
-      execResult = getResultSetHash(rs);
-      execResult.runtime = runtime;
-    } else {
-      // default values
-      execResult = new ExecutionResult();
-      execResult.runtime = runtime;
     }
     /* clean up the remaining used resources */
 
@@ -218,12 +281,11 @@ public class MyUtils {
       ps.close();
       rs.close();
     } catch (Exception e) {
-      System.out.println(e);
       e.printStackTrace();
       // no good way to handle this (?)
       System.exit(-1);
     }
-    // clear cache
+
     return execResult;
   }
 

@@ -19,6 +19,7 @@ class Main {
     Options options = new Options();
     options.addOption(newOption("port", "port number for zmq server"));
     options.addOption(newOption("query", "query number to run"));
+    options.addOption(newOption("clearCache", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("onlyFinalReward", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("lopt", "Use the LoptOptimizeJoinRule planner or not. boolean: 0 or 1"));
     options.addOption(newOption("python", "Use the planner to support the python controlled open-ai style environment or not. boolean: 0 or 1"));
@@ -93,11 +94,11 @@ class Main {
     boolean exhaustive = (Integer.parseInt(cmd.getOptionValue("exhaustive", "0")) == 1);
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
+    boolean clearCache = (Integer.parseInt(cmd.getOptionValue("clearCache", "0")) == 1);
 
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
 
     String costModel = cmd.getOptionValue("costModel", "");
-    //boolean execOnDB = cmd.hasOption("execOnDB");
     boolean execOnDB = (Integer.parseInt(cmd.getOptionValue("execOnDB", "0")) == 1);
 
     String dataset = cmd.getOptionValue("dataset", "JOB");
@@ -131,13 +132,14 @@ class Main {
 
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.BUSHY);
 
+    System.out.println("plannerTypes: " + plannerTypes);
     QueryOptExperiment exp = null;
     String dbUrl = "jdbc:calcite:model=pg-schema.json";
-
     QueryOptExperiment.Params params = new QueryOptExperiment.Params();
     params.execOnDB = execOnDB;
     params.dbUrl = dbUrl;
     params.python = python;
+    params.clearCache = clearCache;
 
     try {
         exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, verbose, train, costModel, params);

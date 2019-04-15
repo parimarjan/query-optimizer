@@ -148,11 +148,16 @@ public class QueryOptExperiment {
     public boolean execOnDB = false;
     public boolean verifyResults = false;
     public boolean recomputeFixedPlanners = true;
-    public Long maxExecutionTime = 50000L;
+    public Long maxExecutionTime = 10000L;
     public boolean python = true;
     public String dbUrl = "";
+    // FIXME: make this command line arg
+    public String pgUrl = "jdbc:postgresql://localhost/imdb";
+    public String user = "imdb";
+    public String pwd = "";
     // clear cache after every execution
     public boolean clearCache = true;
+    public String cardinalitiesModel = "default";
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -199,10 +204,8 @@ public class QueryOptExperiment {
     this.costModelName = costModelName;
     this.verbose = verbose;
     this.dbUrl = dbUrl;
-    // user, password does not seem to be required if it isn't explictly set in
-    // the db
-    //this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl, "bobTheCat", "");
     this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
+    //System.out.println("connection successful!");
     DbInfo.init(conn);
     this.zmq = new ZeroMQServer(port, verbose);
     this.plannerTypes = plannerTypes;
@@ -278,13 +281,19 @@ public class QueryOptExperiment {
     if (params.python) zmq.waitForClientTill("getAttrCount");
     int nextQuery = -1;
     ArrayList<Integer> queries;
+    // TODO: ugh clean up the way i handle ordering etc.
     boolean alreadyTesting = false;
     while (true) {
+
+      // at this point, all the other planners would have executed on the
+      // current query as well, so all the stats about it would be updated in
+      // the Query struct.
+      if (params.python) zmq.waitForClientTill("getQueryInfo");
       if (params.python) zmq.waitForClientTill("reset");
+
       if (train) {
         alreadyTesting = false;
         queries = trainQueries;
-        //nextQuery = ThreadLocalRandom.current().nextInt(0, queries.size());
         // FIXME: is deterministic order ok always?
         nextQuery = (nextQuery + 1) % queries.size();
       } else {
@@ -313,12 +322,11 @@ public class QueryOptExperiment {
           boolean success = planAndExecuteQuery(query, i);
         } catch (Exception e) {
           String plannerName = plannerTypes.get(i).name();
-          System.out.println("failed in planAndExecute for " + plannerName +
-              " for query number " + nextQuery);
-          System.out.println(e);
           e.printStackTrace();
           query.costs.put(plannerName, -1.00);
-          //throw e;
+          System.out.println("failed in planAndExecute for " + plannerName +
+              " for query number " + nextQuery);
+          System.exit(-1);
         }
       }
       if (params.verifyResults) {
@@ -372,13 +380,15 @@ public class QueryOptExperiment {
     // mysterious reasons
     RelTraitSet traitSet =
       planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+
+    // FIXME: to execute on postgres, just execute plain sql
     if (params.execOnDB) {
       // FIXME: in the future, do not rerun.
-      // run unoptimized node
-      //System.out.println("GOING TO EXECUTE WITH ORIGINAL NODE");
-      //MyUtils.ExecutionResult result = MyUtils.executeNode(node, false);
-      //// FIXME: need to separate out which DBMS we run it on as well.
-      //query.dbmsRuntimes.put("postgres", result.runtime);
+      //// run unoptimized node
+      System.out.println("GOING TO EXECUTE WITH ORIGINAL NODE");
+      MyUtils.ExecutionResult result = MyUtils.executeSql(query.sql, false, true);
+      // FIXME: need to separate out which DBMS we run it on as well.
+      query.dbmsRuntimes.put("postgres", result.runtime);
     }
 
     try {
@@ -400,7 +410,8 @@ public class QueryOptExperiment {
         // TODO: maybe we don't want to keep re-executing all planners?
         System.out.println("going to execute " + plannerName);
         // FIXME: add the MAX-EXECUTION-TIME timeout to this
-        MyUtils.ExecutionResult result = MyUtils.executeNode(optimizedNode, false);
+        MyUtils.ExecutionResult result = MyUtils.executeNode(optimizedNode, false,
+                                                    params.clearCache);
         if (result == null) {
           System.out.println("runtime execution failed!");
           // what should we do here? trying to re-execute the query seems to
@@ -409,20 +420,10 @@ public class QueryOptExperiment {
           result = new MyUtils.ExecutionResult();
           result.runtime = params.maxExecutionTime;
         }
+
         // FIXME: need to separate out which DBMS we run it on as well.
         query.dbmsRuntimes.put(plannerName, result.runtime);
-        if (params.verifyResults) {
-          // FIXME: if result == null above, then this test would fail for no
-          // reason.
-          query.resultVerifier.put(plannerName, result.resultHashCode);
-        }
-        if (plannerName.equals("RL")) {
-          // Don't need to set this anywhere as it will be part of the
-          // queryInfo structure.
-          //zmq.runtime = result.runtime;
-          zmq.waitForClientTill("getQueryInfo");
-        }
-        // TODO: clear the caches!
+        query.resultVerifier.put(plannerName, result.resultHashCode);
       }
       // FIXME: save the updated costs to disk, or NOT?
     } catch (Exception e) {

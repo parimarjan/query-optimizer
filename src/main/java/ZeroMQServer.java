@@ -104,6 +104,14 @@ public class ZeroMQServer {
     Query curQuery;
     switch (msg)
     {
+      case "execOnDB":
+        QueryOptExperiment.getParams().execOnDB = true;
+        resp = "";
+        break;
+      case "noExecOnDB":
+        QueryOptExperiment.getParams().execOnDB = false;
+        resp = "";
+        break;
       case "test":
         QueryOptExperiment.setTrainMode(false);
         resp = "";

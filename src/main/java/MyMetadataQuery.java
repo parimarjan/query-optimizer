@@ -63,53 +63,53 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
   @Override
   public Double getRowCount(RelNode rel) {
-    //System.out.println("getRowCount, node is type: " + rel.getClass().getName());
-    // FIXME: error checking needs to be done here!!!!
+    // FIXME: more error checking needs to be done here!!!!
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
-    String sqlQuery = query.sql;
-    HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
-    if (curQueryMap == null) return super.getRowCount(rel);
-    if (rel instanceof Filter || rel instanceof TableScan) {
-      String tableName = MyUtils.getTableName(rel);
-      Double trueCard = curQueryMap.get(tableName);
-      if (trueCard == null) {
-        return super.getRowCount(rel);
+    if (params.cardinalitiesModel.equals("file")) {
+      // in this case, the provided cardinality file should have entries for
+      // each of the needed queries.
+      // TODO: explain the format better.
+      ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
+      //System.out.println("returned table names: " + tableNames);
+      return null;
+    } else {
+      // Default: use true cardinalities for the base tables, and calcite's
+      // default handling for all the joins (some sort of very simple Selinger
+      // model...)
+      String sqlQuery = query.sql;
+      HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
+      Double rowCount = null;
+      if (curQueryMap == null) {
+        //System.out.println("case 1");
+        rowCount = super.getRowCount(rel);
       }
-      String nodeString = RelOptUtil.toString(rel);
-      //System.out.println(nodeString + trueCard);
-      return trueCard;
-    } else if (rel instanceof RelSubset) {
-      // this seems like it should need special handling, but it probably wraps
-      // around either Filter / TableScan, so it will be handled when this
-      // function is called again.
-      return super.getRowCount(rel);
+      if (rel instanceof Filter || rel instanceof TableScan) {
+        String tableName = MyUtils.getTableName(rel);
+        if (tableName == null) {
+          rowCount = super.getRowCount(rel);
+        } else {
+          rowCount = curQueryMap.get(tableName);
+        }
+        if (rowCount == null) {
+          //System.out.println("case 2");
+          rowCount = super.getRowCount(rel);
+        }
+        //System.out.println("case 3");
+      } else if (rel instanceof RelSubset) {
+        // this seems like it should need special handling, but it probably wraps
+        // around either Filter / TableScan, so it will be handled when this
+        // function is called again.
+        //System.out.println("case 4");
+        rowCount = super.getRowCount(rel);
+      }
+      if (rowCount == null) {
+        //System.out.println("case 5");
+        rowCount = super.getRowCount(rel);
+      }
+      //System.out.println("returning rowCount: " + rowCount);
+      return rowCount;
     }
-    return super.getRowCount(rel);
-    //Double rowCount = null;
-    //boolean computeTrueCard = false;
-    //if (rel instanceof TableScan || rel instanceof JdbcTableScan) {
-      //System.out.println("TableScan!");
-      ////computeTrueCard = true;
-    //} else if (rel instanceof Filter || rel instanceof LogicalFilter) {
-      //// if child is TableScan, then it is Filter ( Scan ( ...)) block, so we
-      //// should compute the true cardinality of the base table
-      //System.out.println("child of Filter is: " + rel.getInput(0));
-      //if (rel.getInput(0) instanceof TableScan || rel.getInput(0) instanceof RelSubset) {
-        ////computeTrueCard = true;
-      //}
-    //} else if (rel instanceof RelSubset) {
-      //// just compute TrueCard here as well?
-      ////return getRowCount(rel.getInput(0));
-      //computeTrueCard = true;
-    //}
-    //if (computeTrueCard) {
-      //rowCount = QueryOptExperiment.getTrueCardinality(rel);
-    //} else {
-      //System.out.println("calling super class");
-      //rowCount = super.getRowCount(rel);
-    //}
-    //System.out.println("returning rowCount: " + rowCount);
-    //return rowCount;
   }
 
 	@Override
