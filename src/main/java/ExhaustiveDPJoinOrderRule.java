@@ -74,6 +74,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
 
 	/*
 	 * We follow the algorithm described at:
+   * https://dsg.uwaterloo.ca/seminars/notes/Guido.pdf
 	 */
   @Override
   public void onMatch(RelOptRuleCall call)
@@ -88,7 +89,8 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
 			 // no edges have been chosen yet, so we add an empty list
-			 memoizedBestJoins.put(ImmutableBitSet.range(i, i+1), new IntermediateJoinState(new ArrayList<ImmutableBitSet[]>(), 0.00));
+			 memoizedBestJoins.put(ImmutableBitSet.range(i, i+1),
+           new IntermediateJoinState(new ArrayList<ImmutableBitSet[]>(), 0.00));
     }
     QueryGraph startQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
     Iterator<ImmutableBitSet[]> csgCmpIt = startQG.csgCmpIterator();
@@ -111,13 +113,13 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       for (ImmutableBitSet[] factors : p1) {
         //System.out.println("p1 factors[0]: " + factors[0]);
         //System.out.println("p1 factors[1]: " + factors[1]);
-        curQG.updateGraph(factors);
+        curQG.updateGraphBitset(factors);
       }
       int factor1Idx = curQG.allVertexes.size()-1;
       for (ImmutableBitSet[] factors : p2) {
         //System.out.println("p2 factors[0]: " + factors[0]);
         //System.out.println("p2 factors[1]: " + factors[1]);
-        curQG.updateGraph(factors);
+        curQG.updateGraphBitset(factors);
       }
       for (QueryGraph.Vertex v : curQG.allVertexes) {
         if (v != null) {
@@ -131,7 +133,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       ImmutableBitSet[] lastFactors = {S1, S2};
       //System.out.println("lastFactors1: " + lastFactors[0]);
       //System.out.println("lastFactors2: " + lastFactors[1]);
-      curQG.updateGraph(lastFactors);
+      curQG.updateGraphBitset(lastFactors);
       double curCost = curQG.costSoFar;
       IntermediateJoinState bestOrder = memoizedBestJoins.get(S);
       ArrayList<ImmutableBitSet[]> curOrder = new ArrayList<ImmutableBitSet[]>();
@@ -156,13 +158,15 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       memoizedBestJoins.get(ImmutableBitSet.range(0,
             multiJoin.getNumJoinFactors())).bestJoins;
     QueryGraph finalQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+    Query curQuery = QueryOptExperiment.getCurrentQuery();
+    curQuery.joinOrders.put("EXHAUSTIVE", new ArrayList<int[]>());
+
     for (ImmutableBitSet[] factors : optOrdering) {
-      //System.out.println("optO factors[0]: " + factors[0]);
-      //System.out.println("optO factors[1]: " + factors[1]);
-      finalQG.updateGraph(factors);
+      int[] factorIndices = finalQG.updateGraphBitset(factors);
+      curQuery.joinOrders.get("EXHAUSTIVE").add(factorIndices);
     }
-		RelNode optNode = finalQG.getFinalOptimalRelNode();
-		call.transformTo(optNode);
+    RelNode optNode = finalQG.getFinalOptimalRelNode();
+    call.transformTo(optNode);
   }
 }
 

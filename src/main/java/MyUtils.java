@@ -46,13 +46,13 @@ public class MyUtils {
     }
     List<RelNode> inputs = rel.getInputs();
     ArrayList<String> tableNames = new ArrayList<String>();
-    System.out.println("inputs.size = " + inputs.size());
+    //System.out.println("inputs.size = " + inputs.size());
     //if (inputs.size() == 0) {
       //System.out.println(rel);
     //}
     if (inputs.size() <= 1) {
       //String curTable = getTableName(inputs.get(0));
-      System.out.println("rel: " + rel);
+      //System.out.println("rel: " + rel);
       String curTable = getTableName(rel);
       tableNames.add(curTable);
     } else {
@@ -129,7 +129,7 @@ public class MyUtils {
   {
       System.out.println("clear cache...");
       try {
-        String cmd = "./test.sh";
+        String cmd = "./drop_cache.sh";
         Process cmdProc = Runtime.getRuntime().exec(cmd);
         cmdProc.waitFor();
         System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());

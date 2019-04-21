@@ -88,104 +88,112 @@ public class LeftDeepJoinOrderRule extends RelOptRule
 			 // no edges have been chosen yet, so we add an empty list
 			 memoizedBestJoins.put(factor, new ArrayList<Integer>());
     }
+
     ArrayList<Integer> initialVertexIdxs = new ArrayList<Integer>();
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       initialVertexIdxs.add(i);
     }
 
     // optimization: consider ab = ba.
-		for (int k = 2; k < multiJoin.getNumJoinFactors()+1; k++) {
-			List<Set<Integer>> res = new ArrayList<>();
-			getSubsets(initialVertexIdxs, k, 0, new HashSet<Integer>(), res);
-			for (Set<Integer> subset : res) {
-				// the subset might already be memoized.
-				double minCost = Double.POSITIVE_INFINITY;
-				ArrayList<Integer> bestEdges = null;
+    for (int k = 2; k < multiJoin.getNumJoinFactors()+1; k++) {
+        List<Set<Integer>> res = new ArrayList<>();
+        getSubsets(initialVertexIdxs, k, 0, new HashSet<Integer>(), res);
+        for (Set<Integer> subset : res) {
+            // the subset might already be memoized.
+            double minCost = Double.POSITIVE_INFINITY;
+            ArrayList<Integer> bestEdges = null;
 
-				// basically, at the end of this iteration, we should have the current
-				// subset entered into the memoized map.
-				for (Integer r : subset) {
-					HashSet<Integer> S_i = new HashSet<Integer>(subset);
-					S_i.remove(r);
-					//System.out.println("S_i is: " + S_i);
-					ArrayList<Integer> optimalMemoizedEdges = memoizedBestJoins.get(S_i);
-					if (optimalMemoizedEdges == null) {
-						// must not have been a valid join (e.g., there may not have been any
-						// edges between the given factors)
-						continue;
-					}
+            // basically, at the end of this iteration, we should have the current
+            // subset entered into the memoized map.
+            for (Integer r : subset) {
+                HashSet<Integer> S_i = new HashSet<Integer>(subset);
+                S_i.remove(r);
+                //System.out.println("S_i is: " + S_i);
+                ArrayList<Integer> optimalMemoizedEdges = memoizedBestJoins.get(S_i);
+                if (optimalMemoizedEdges == null) {
+                    // must not have been a valid join (e.g., there may not have been any
+                    // edges between the given factors)
+                    continue;
+                }
 
-					// create new QueryGraph and reconstruct the joins using the
-					// memoizedFactors. Note: it is important to pass in a new copy of
-					// the relBuilder because it maintains state, so that can not be
-					// shared among multiple queryGraphs
-					QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-					for (Integer edge : optimalMemoizedEdges) {
-						qg.updateGraph(qg.edges.get(edge).factors.toArray());
-					}
-					double curCost = qg.costSoFar;
-					// try to do the join represented by optimalMemoizedEdges AND the factor r.
-					// Can only do this join if there is an edge connecting r with one of
-					// the elements in S_i. This must be one of the unusedEdges.
-					//List<QueryGraphUtils.Vertex> curVertexes = new ArrayList(optimalMemoizedEdges.curVertexes);
-					//List<LoptMultiJoin2.Edge> curUnusedEdges = new ArrayList(optimalMemoizedEdges.curUnusedEdges);
+                // create new QueryGraph and reconstruct the joins using the
+                // memoizedFactors. Note: it is important to pass in a new copy of
+                // the relBuilder because it maintains state, so that can not be
+                // shared among multiple queryGraphs
+                QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+                for (Integer edge : optimalMemoizedEdges) {
+                    qg.updateGraph(qg.edges.get(edge).factors.toArray());
+                }
+                double curCost = qg.costSoFar;
+                // try to do the join represented by optimalMemoizedEdges AND the factor r.
+                // Can only do this join if there is an edge connecting r with one of
+                // the elements in S_i. This must be one of the unusedEdges.
+                //List<QueryGraphUtils.Vertex> curVertexes = new ArrayList(optimalMemoizedEdges.curVertexes);
+                //List<LoptMultiJoin2.Edge> curUnusedEdges = new ArrayList(optimalMemoizedEdges.curUnusedEdges);
 
-					ImmutableBitSet.Builder neededFactorsBld = ImmutableBitSet.builder();
-					neededFactorsBld.set(r);
-					if (S_i.size() == 1) {
-						for (Integer s_i : S_i) {
-							neededFactorsBld.set(s_i);
-						}
-					} else {
-            //// FIXME: Not sure about this.
-						// the last vertex in curVertexes must be the right factor since we
-						// are doing left-deep joins
-						neededFactorsBld.set(qg.allVertexes.size() - 1);
-					}
-					ImmutableBitSet neededFactors = neededFactorsBld.build();
+                ImmutableBitSet.Builder neededFactorsBld = ImmutableBitSet.builder();
+                neededFactorsBld.set(r);
+                if (S_i.size() == 1) {
+                    for (Integer s_i : S_i) {
+                        neededFactorsBld.set(s_i);
+                    }
+                } else {
+        //// FIXME: Not sure about this.
+                    // the last vertex in curVertexes must be the right factor since we
+                    // are doing left-deep joins
+                    neededFactorsBld.set(qg.allVertexes.size() - 1);
+                }
+                ImmutableBitSet neededFactors = neededFactorsBld.build();
 
-					// FIXME: this might not work if edge.factors have the latest
-					// vertex rather than original indices of all the factors.
-					// for vertices with more than one factor, we know the last vertex
-					// added to curVertexes represents the best joined vertex so far
-					// (...)
-					Integer bestEdge = null;
-					for (int edgeOrd = 0; edgeOrd < qg.edges.size(); edgeOrd+=1) {
-						// FIXME: do we need curEdge?
-						QueryGraph.Edge curEdge = qg.edges.get(edgeOrd);
-						if (curEdge.factors.equals(neededFactors)) {
-							bestEdge = edgeOrd;
-							break;
-						}
-					}
-					if (bestEdge == null) {
-						//System.out.println("no best edge!!!");
-						continue;
-					}
+                // FIXME: this might not work if edge.factors have the latest
+                // vertex rather than original indices of all the factors.
+                // for vertices with more than one factor, we know the last vertex
+                // added to curVertexes represents the best joined vertex so far
+                // (...)
+                Integer bestEdge = null;
+                for (int edgeOrd = 0; edgeOrd < qg.edges.size(); edgeOrd+=1) {
+                    // FIXME: do we need curEdge?
+                    QueryGraph.Edge curEdge = qg.edges.get(edgeOrd);
+                    if (curEdge.factors.equals(neededFactors)) {
+                        bestEdge = edgeOrd;
+                        break;
+                    }
+                }
+                if (bestEdge == null) {
+                    //System.out.println("no best edge!!!");
+                    continue;
+                }
 
-					int [] factors = qg.edges.get(bestEdge).factors.toArray();
-					curCost += qg.updateGraph(factors);
-					if (curCost < minCost) {
-						minCost = curCost;
-						bestEdges = new ArrayList<Integer>(optimalMemoizedEdges);
-						bestEdges.add(bestEdge);
-					}
-				}
+                int [] factors = qg.edges.get(bestEdge).factors.toArray();
+                curCost += qg.updateGraph(factors);
+                if (curCost < minCost) {
+                    minCost = curCost;
+                    bestEdges = new ArrayList<Integer>(optimalMemoizedEdges);
+                    bestEdges.add(bestEdge);
+                }
+            }
 
-				if (bestEdges == null) continue;
-				memoizedBestJoins.put(subset, bestEdges);
-			}
-		}
-		// celebrate and add the relNode being developed so far from optRelNodes
-		// to the set of equivalent nodes.
-		QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-		Set<Integer> allFactors = new HashSet<Integer>(initialVertexIdxs);
-		ArrayList<Integer> bestEdges = memoizedBestJoins.get(allFactors);
-		for (Integer edge : bestEdges) {
-			qg.updateGraph(qg.edges.get(edge).factors.toArray());
-		}
-		RelNode optNode = qg.getFinalOptimalRelNode();
-		call.transformTo(optNode);
+            if (bestEdges == null) continue;
+            memoizedBestJoins.put(subset, bestEdges);
+        }
+    }
+    // celebrate and add the relNode being developed so far from optRelNodes
+    // to the set of equivalent nodes.
+    QueryGraph qg = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+    Set<Integer> allFactors = new HashSet<Integer>(initialVertexIdxs);
+    ArrayList<Integer> bestEdges = memoizedBestJoins.get(allFactors);
+
+    Query curQuery = QueryOptExperiment.getCurrentQuery();
+    curQuery.joinOrders.put("LEFT_DEEP", new ArrayList<int[]>());
+
+    for (Integer edge : bestEdges) {
+        // FIXME: update the joinOrders
+        int[] factorIndices = qg.edges.get(edge).factors.toArray();
+        qg.updateGraph(factorIndices);
+        curQuery.joinOrders.get("LEFT_DEEP").add(factorIndices);
+    }
+    RelNode optNode = qg.getFinalOptimalRelNode();
+    call.transformTo(optNode);
   }
 
 	/* Modified from:

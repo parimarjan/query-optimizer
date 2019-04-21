@@ -30,8 +30,23 @@ import java.io.Serializable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.*;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.apache.commons.io.FileUtils;
+
+//import org.apache.calcite.rel.rel2sql;
+import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
+//import org.apache.calcite.rel.RelToSqlConverter;
+//import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.dialect.AnsiSqlDialect;
+import org.apache.calcite.rel.rel2sql.SqlImplementor.Result;
+import org.apache.calcite.sql.SqlNode;
 
 public class MyMetadataQuery extends RelMetadataQuery {
+  private class JsonCardinalities
+  {
+    Map<String, Map<String, Double>> cardinalities;
+  }
 
   // in terms of number of rows. This is used for calculating the cost in a
   // non-linear model.
@@ -42,6 +57,8 @@ public class MyMetadataQuery extends RelMetadataQuery {
   // FIXME: temporary solution. make this general purpose.
   private final String BASE_CARDINALITIES_FILE_NAME = "cardinalities.ser";
   public HashMap<String, HashMap<String, Double>> trueBaseCardinalities;
+  private final String CARDINALITIES_FILE = "test.json";
+  public HashMap<String, HashMap<String, Long>> cards;
 
   /**
    * Returns an instance of RelMetadataQuery. It ensures that cycles do not
@@ -59,6 +76,20 @@ public class MyMetadataQuery extends RelMetadataQuery {
     if (trueBaseCardinalities == null) {
       trueBaseCardinalities = new HashMap<String, HashMap<String, Double>>();
     }
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    if (params.cardinalitiesModel.equals("file")) {
+      File file = new File(CARDINALITIES_FILE);
+      String jsonStr = null;
+      try {
+        jsonStr = FileUtils.readFileToString(file, "UTF-8");
+      } catch (Exception e) {
+        e.printStackTrace();
+        System.exit(-1);
+      }
+      Gson gson = new Gson();
+      cards = gson.fromJson(jsonStr, new TypeToken<HashMap<String, HashMap<String, Long>>>() {}.getType());
+      //System.out.println(cards);
+    }
   }
 
   @Override
@@ -66,50 +97,101 @@ public class MyMetadataQuery extends RelMetadataQuery {
     // FIXME: more error checking needs to be done here!!!!
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
+
+    // trying to get sql query here FAILS because VolcanoPlanner's RelSubset
+    // doesn't have a RelToSqlConverter implementation...
+    //try {
+      //if (true) {
+				//if (rel instanceof RelSubset) {
+					//// this seems like it should need special handling, but it probably wraps
+					//// around either Filter / TableScan, so it will be handled when this
+					//// function is called again.
+					////System.out.println("case 4");
+					//return super.getRowCount(rel);
+				//} else {
+          //System.out.println(rel);
+					//RelToSqlConverter relToSqlConverter	= new RelToSqlConverter(AnsiSqlDialect.DEFAULT);
+					//System.out.println("got rel2Sql!");
+					//RelToSqlConverter.Result res = relToSqlConverter.visitChild(0, rel);
+					//SqlNode sqlNode = res.asQueryOrValues();
+					//String result = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT, false).getSql();
+					//System.out.println(result);
+					////Result sqlres = relSql.visit(rel);
+					////Result sqlres = relSql.result(rel);
+					////System.out.println(sqlRes);
+					////System.exit(-1);
+				//}
+		//}
+    //} catch (Exception e) {
+      //e.printStackTrace();
+      ////System.exit(-1);
+    //}
+
     if (params.cardinalitiesModel.equals("file")) {
       // in this case, the provided cardinality file should have entries for
       // each of the needed queries.
       // TODO: explain the format better.
       ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
-      //System.out.println("returned table names: " + tableNames);
-      return null;
-    } else {
-      // Default: use true cardinalities for the base tables, and calcite's
-      // default handling for all the joins (some sort of very simple Selinger
-      // model...)
-      String sqlQuery = query.sql;
-      HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
-      Double rowCount = null;
-      if (curQueryMap == null) {
-        //System.out.println("case 1");
-        rowCount = super.getRowCount(rel);
+      java.util.Collections.sort(tableNames);
+      String tableKey = "";
+      for (String tN : tableNames) {
+        tableKey += " " + tN;
       }
-      if (rel instanceof Filter || rel instanceof TableScan) {
-        String tableName = MyUtils.getTableName(rel);
-        if (tableName == null) {
-          rowCount = super.getRowCount(rel);
+      if (!tableKey.contains("null")) {
+        //System.out.println("filename: " + query.fileName);
+        String fileName = "join-order-benchmark/" + query.fileName;
+        HashMap<String, Long> qCards = cards.get(fileName);
+        if (qCards == null) {
+          System.out.println("qCards is null!");
+          System.exit(-1);
         } else {
-          rowCount = curQueryMap.get(tableName);
+          Long rowCount = qCards.get(tableKey);
+          //System.out.println("found rowCount from file!: " + rowCount);
+          if (rowCount != null) {
+            return rowCount.doubleValue();
+          }
+          //System.out.println("row count was null!");
+          //System.out.println("fileName: " + query.fileName);
+          //System.out.println("tableKey: " + tableKey);
+          //System.exit(-1);
         }
-        if (rowCount == null) {
-          //System.out.println("case 2");
-          rowCount = super.getRowCount(rel);
-        }
-        //System.out.println("case 3");
-      } else if (rel instanceof RelSubset) {
-        // this seems like it should need special handling, but it probably wraps
-        // around either Filter / TableScan, so it will be handled when this
-        // function is called again.
-        //System.out.println("case 4");
+      }
+    }
+    // Default: use true cardinalities for the base tables, and calcite's
+    // default handling for all the joins (some sort of very simple Selinger
+    // model...)
+    String sqlQuery = query.sql;
+    HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
+    Double rowCount = null;
+    if (curQueryMap == null) {
+      //System.out.println("case 1");
+      rowCount = super.getRowCount(rel);
+    }
+    if (rel instanceof Filter || rel instanceof TableScan) {
+      String tableName = MyUtils.getTableName(rel);
+      if (tableName == null) {
         rowCount = super.getRowCount(rel);
+      } else {
+        rowCount = curQueryMap.get(tableName);
       }
       if (rowCount == null) {
-        //System.out.println("case 5");
+        //System.out.println("case 2");
         rowCount = super.getRowCount(rel);
       }
-      //System.out.println("returning rowCount: " + rowCount);
-      return rowCount;
+      //System.out.println("case 3");
+    } else if (rel instanceof RelSubset) {
+      // this seems like it should need special handling, but it probably wraps
+      // around either Filter / TableScan, so it will be handled when this
+      // function is called again.
+      //System.out.println("case 4");
+      rowCount = super.getRowCount(rel);
     }
+    if (rowCount == null) {
+      //System.out.println("case 5");
+      rowCount = super.getRowCount(rel);
+    }
+    //System.out.println("returning rowCount: " + rowCount);
+    return rowCount;
   }
 
 	@Override

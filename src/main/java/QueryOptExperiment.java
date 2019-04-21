@@ -147,7 +147,7 @@ public class QueryOptExperiment {
     //public boolean onlyFinalReward = false;
     public boolean execOnDB = false;
     public boolean verifyResults = false;
-    public boolean recomputeFixedPlanners = true;
+    public boolean recomputeFixedPlanners = false;
     public Long maxExecutionTime = 10000L;
     public boolean python = true;
     public String dbUrl = "";
@@ -156,8 +156,8 @@ public class QueryOptExperiment {
     public String user = "imdb";
     public String pwd = "";
     // clear cache after every execution
-    public boolean clearCache = true;
-    public String cardinalitiesModel = "default";
+    public boolean clearCache = false;
+    public String cardinalitiesModel = "file";
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -355,7 +355,10 @@ public class QueryOptExperiment {
     // In that case, we have no need to execute it again, as the result
     // will be stored in the Query object. Never do caching for RL since
     // the plans are constantly changing.
-    if (!plannerName.equals("RL") && !params.recomputeFixedPlanners) {
+    if (!plannerName.equals("RL") &&
+            !params.recomputeFixedPlanners
+            && !params.execOnDB)
+    {
       Double cost = query.costs.get(plannerName);
       // if we already executed this query, and nothing should change for the
       // deterministic planners

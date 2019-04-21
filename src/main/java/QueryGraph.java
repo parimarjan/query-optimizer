@@ -433,7 +433,7 @@ public class QueryGraph implements CsgCmpIterator {
   /* @factors: length 2 array, representing the two factors in a given join.
    * Each element has the factor indices for each of the nodes in the join.
    */
-  public double updateGraph(ImmutableBitSet[] factors)
+  public int[] updateGraphBitset(ImmutableBitSet[] factors)
   {
     // first convert the factors, to int [], representing indices
     int[] factorIndices = new int[2];
@@ -449,8 +449,10 @@ public class QueryGraph implements CsgCmpIterator {
         }
       }
     }
+    //System.out.println("factorIndices in updateGraph: " + factorIndices[0] + ", " + factorIndices[1]);
     assert factorIndices[0] != factorIndices[1];
-    return updateGraph(factorIndices);
+    updateGraph(factorIndices);
+    return factorIndices;
   }
 
   /* Updates the list of relNodes that correspond to each join order selection.
