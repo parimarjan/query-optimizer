@@ -158,6 +158,10 @@ public class QueryOptExperiment {
     // clear cache after every execution
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
+    public String cardinalityError = "noError";
+    //public Double gaussianErrorStd = 100000.00;
+    //public Double gaussianErrorMean = 100000.00;
+    public Integer cardErrorRange = 10;
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -180,6 +184,8 @@ public class QueryOptExperiment {
 
   public ArrayList<Integer> trainQueries;
   public ArrayList<Integer> testQueries;
+  // testing if features were set correctly
+  public MyMetadataQuery mq;
 
   /*
   *************************************************************************
@@ -210,6 +216,7 @@ public class QueryOptExperiment {
     this.zmq = new ZeroMQServer(port, verbose);
     this.plannerTypes = plannerTypes;
     volcanoPlanners = new ArrayList<Planner>();
+    this.mq = MyMetadataQuery.instance();
 
     // Initialize all the volcanoPlanners we should need
     for (PLANNER_TYPE t  : plannerTypes) {
@@ -305,9 +312,20 @@ public class QueryOptExperiment {
           alreadyTesting = true;
         }
       }
-      if (verbose) System.out.println("nextQuery is: " + nextQuery);
       // FIXME: simplify this
       Query query = allSqlQueries.get(queries.get(nextQuery));
+      // if we are using file cardinalities and this query is not in
+      // MyMetadataQuery's file, then we skip it.
+      if (params.cardinalitiesModel.equals("file")) {
+        String fileName = "join-order-benchmark/" + query.fileName;
+        HashMap<String, Long> qCards = this.mq.cards.get(fileName);
+        if (qCards == null) {
+          if (verbose) System.out.println("skipping " + fileName + " because it is not in cardinalities file.");
+          continue;
+        }
+      }
+
+      if (verbose) System.out.println("nextQuery is: " + nextQuery);
       String sqlQuery = query.sql;
       currentQuery = query;
       zmq.sqlQuery = sqlQuery;
@@ -317,6 +335,7 @@ public class QueryOptExperiment {
         break;
       }
       zmq.reset = false;
+      //System.out.println("going to execute: " + query.fileName);
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
           boolean success = planAndExecuteQuery(query, i);
@@ -377,8 +396,6 @@ public class QueryOptExperiment {
     }
 
     DbInfo.setCurrentQueryVisibleFeatures(node);
-    // testing if features were set correctly
-    MyMetadataQuery mq = MyMetadataQuery.instance();
     // very important to do the replace EnumerableConvention thing for
     // mysterious reasons
     RelTraitSet traitSet =

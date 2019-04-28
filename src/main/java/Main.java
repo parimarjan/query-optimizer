@@ -20,6 +20,7 @@ class Main {
     options.addOption(newOption("port", "port number for zmq server"));
     options.addOption(newOption("query", "query number to run"));
     options.addOption(newOption("clearCache", "reward at every step, or only at end. Boolean: 0 or 1"));
+    options.addOption(newOption("recomputeFixedPlanners", "Recompute plans / costs for all heuristics. Boolean: 0 or 1"));
     options.addOption(newOption("onlyFinalReward", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("lopt", "Use the LoptOptimizeJoinRule planner or not. boolean: 0 or 1"));
     options.addOption(newOption("python", "Use the planner to support the python controlled open-ai style environment or not. boolean: 0 or 1"));
@@ -95,6 +96,7 @@ class Main {
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
     boolean clearCache = (Integer.parseInt(cmd.getOptionValue("clearCache", "0")) == 1);
+    boolean recomputeFixedPlanners = (Integer.parseInt(cmd.getOptionValue("recomputeFixedPlanners", "0")) == 1);
 
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
 
@@ -140,6 +142,7 @@ class Main {
     params.dbUrl = dbUrl;
     params.python = python;
     params.clearCache = clearCache;
+    params.recomputeFixedPlanners = recomputeFixedPlanners;
 
     try {
         exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, verbose, train, costModel, params);
