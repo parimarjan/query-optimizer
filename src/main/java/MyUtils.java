@@ -37,6 +37,8 @@ import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.io.IOUtils;
+import java.nio.charset.StandardCharsets;
 
 public class MyUtils {
 
@@ -132,7 +134,13 @@ public class MyUtils {
         String cmd = "./drop_cache.sh";
         Process cmdProc = Runtime.getRuntime().exec(cmd);
         cmdProc.waitFor();
+        StringWriter writer = new StringWriter();
+        InputStream inputStream = cmdProc.getInputStream();
+        IOUtils.copy(inputStream, writer, StandardCharsets.UTF_8);
+        String outString = writer.toString();
+
         System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());
+        System.out.println(outString);
 
         // doesn't seem to change anything if we sleep here or not.
         //TimeUnit.SECONDS.sleep(60);
@@ -212,7 +220,8 @@ public class MyUtils {
     if (clearCache) {
         clearCache();
         // dummy execution
-        executeNode(node, false, false);
+        //System.out.println("dummy execution, ignore results");
+        //executeNode(node, false, false);
     }
     ResultSet rs = null;
     PreparedStatement ps = null;

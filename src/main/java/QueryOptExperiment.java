@@ -333,7 +333,7 @@ public class QueryOptExperiment {
         break;
       }
       zmq.reset = false;
-      //System.out.println("going to execute: " + query.fileName);
+      System.out.println("going to execute: " + query.fileName);
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
           boolean success = planAndExecuteQuery(query, i);
