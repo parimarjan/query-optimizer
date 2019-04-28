@@ -152,15 +152,13 @@ public class QueryOptExperiment {
     public boolean python = true;
     public String dbUrl = "";
     // FIXME: make this command line arg
-    public String pgUrl = "jdbc:postgresql://localhost/imdb";
+    public String pgUrl = "jdbc:postgresql://localhost:5400/imdb";
     public String user = "imdb";
-    public String pwd = "";
+    public String pwd = "imdb";
     // clear cache after every execution
     public boolean clearCache = false;
-    public String cardinalitiesModel = "file";
+    public String cardinalitiesModel = "";
     public String cardinalityError = "noError";
-    //public Double gaussianErrorStd = 100000.00;
-    //public Double gaussianErrorMean = 100000.00;
     public Integer cardErrorRange = 10;
 
     public Params() {
