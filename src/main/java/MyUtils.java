@@ -171,15 +171,19 @@ public class MyUtils {
       Class.forName("org.postgresql.Driver");
       con = DriverManager.getConnection(params.pgUrl, params.user,
                                           params.pwd);
-			Statement stmt = con.createStatement();
-			//The query can be update query or can be select query
-			//String query = "select * from emp";
+			//Statement stmt = con.createStatement();
+      PreparedStatement ps = con.prepareStatement(sql);
+
       long start = System.currentTimeMillis();
-			boolean status = stmt.execute(sql);
+      rs = ps.executeQuery();
       long end = System.currentTimeMillis();
+			//boolean status = stmt.execute(sql);
+      // should only time it after getting the result set to make it comparable
+      // to the executeNode plans which uses a PreparedStatement.
+      //rs = stmt.getResultSet();
+      //long end = System.currentTimeMillis();
       long runtime = end - start;
       System.out.println("executeSql runtime: " + runtime);
-      rs = stmt.getResultSet();
 			// this can be an expensive operation, so only do it if really needed.
 			if (params.verifyResults || getTrueCardinality) {
 				execResult = getResultSetHash(rs);
