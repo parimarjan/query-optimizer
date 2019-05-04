@@ -148,7 +148,7 @@ public class QueryOptExperiment {
     public boolean execOnDB = false;
     public boolean verifyResults = false;
     public boolean recomputeFixedPlanners = false;
-    public Long maxExecutionTime = 10000L;
+    public Integer maxExecutionTime = 600;
     public boolean python = true;
     public String dbUrl = "";
     // FIXME: make this command line arg
@@ -157,9 +157,11 @@ public class QueryOptExperiment {
     public String pwd = "imdb";
     // clear cache after every execution
     public boolean clearCache = false;
-    public String cardinalitiesModel = "";
+    public String cardinalitiesModel = "file";
     public String cardinalityError = "noError";
     public Integer cardErrorRange = 10;
+    // num reps for runtimes
+    public Integer numReps = 1;
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -333,7 +335,6 @@ public class QueryOptExperiment {
         break;
       }
       zmq.reset = false;
-      System.out.println("going to execute: " + query.fileName);
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
           boolean success = planAndExecuteQuery(query, i);
@@ -358,6 +359,44 @@ public class QueryOptExperiment {
 
   private RelOptCost computeCost(RelMetadataQuery mq, RelNode node) {
     return ((MyMetadataQuery) mq).getCumulativeCost(node);
+  }
+
+  private void execPlannerOnDB(Query query, String plannerName, RelNode node)
+  {
+    // run unoptimized sql query. This should use postgres' usual
+    // optimizations.
+    Long rt = query.dbmsRuntimes.get(plannerName);
+    if (rt != null) {
+      // don't re-execute and waste everyone's breathe
+      return;
+    }
+    System.out.println("going to execute " + query.fileName + " with " + plannerName);
+    ArrayList<Long> rts = new ArrayList<Long>();
+    // run it one extra time
+    for (int i = 0; i < params.numReps; i++) {
+      MyUtils.ExecutionResult result = null;
+      if (plannerName.equals("postgres")) {
+        // run N times, and store the average
+        result = MyUtils.executeSql(query.sql, false,
+            params.clearCache);
+      } else {
+        result = MyUtils.executeNode(node, false, params.clearCache);
+      }
+      System.out.println(plannerName + " took " + result.runtime + "ms");
+      // FIXME: need to separate out which DBMS we run it on as well.
+      //if (i != 0) {
+        //// ignore first run because it seems to take longer ugh.
+        //rts.add(result.runtime);
+      //}
+      rts.add(result.runtime);
+    }
+    query.dbmsAllRuntimes.put(plannerName, rts);
+    //Long average = rts.stream().mapToInt(val -> val).average();
+    Long total = 0L;
+    for (Long val : rts) {
+      total += val;
+    }
+    query.dbmsRuntimes.put(plannerName, total / rts.size());
   }
 
   private boolean planAndExecuteQuery(Query query, int plannerNum)
@@ -399,16 +438,6 @@ public class QueryOptExperiment {
     RelTraitSet traitSet =
       planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
 
-    // FIXME: to execute on postgres, just execute plain sql
-    if (params.execOnDB) {
-      // FIXME: in the future, do not rerun.
-      //// run unoptimized node
-      System.out.println("GOING TO EXECUTE WITH ORIGINAL NODE");
-      MyUtils.ExecutionResult result = MyUtils.executeSql(query.sql, false, true);
-      // FIXME: need to separate out which DBMS we run it on as well.
-      query.dbmsRuntimes.put("postgres", result.runtime);
-    }
-
     try {
       // using the default volcano planner.
       long start = System.currentTimeMillis();
@@ -421,32 +450,26 @@ public class QueryOptExperiment {
       RelOptCost optCost = computeCost(mq, optimizedNode);
       if (verbose) System.out.println("optimized cost for " + plannerName
           + " is: " + optCost);
+      //String optPlan;
+       //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
-        // TODO: maybe we don't want to keep re-executing all planners?
-        System.out.println("going to execute " + plannerName);
-        // FIXME: add the MAX-EXECUTION-TIME timeout to this
-        MyUtils.ExecutionResult result = MyUtils.executeNode(optimizedNode, false,
-                                                    params.clearCache);
-        if (result == null) {
-          System.out.println("runtime execution failed!");
-          // what should we do here? trying to re-execute the query seems to
-          // run into the same error.
-          // For now, just treat it as MAX_EXECUTION TIME
-          result = new MyUtils.ExecutionResult();
-          result.runtime = params.maxExecutionTime;
+        if (plannerName.equals("RL")) {
+          return true;
         }
-
-        // FIXME: need to separate out which DBMS we run it on as well.
-        query.dbmsRuntimes.put(plannerName, result.runtime);
-        query.resultVerifier.put(plannerName, result.resultHashCode);
+        execPlannerOnDB(query, plannerName, optimizedNode);
       }
       // FIXME: save the updated costs to disk, or NOT?
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..
       throw e;
+    }
+
+    // FIXME: to execute on postgres, just execute plain sql
+    if (params.execOnDB) {
+      execPlannerOnDB(query, "postgres", node);
     }
     return true;
   }

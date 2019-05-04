@@ -129,7 +129,7 @@ public class MyUtils {
 
   private static void clearCache()
   {
-      System.out.println("clear cache...");
+      //System.out.println("clear cache...");
       try {
         String cmd = "./drop_cache.sh";
         Process cmdProc = Runtime.getRuntime().exec(cmd);
@@ -139,12 +139,13 @@ public class MyUtils {
         IOUtils.copy(inputStream, writer, StandardCharsets.UTF_8);
         String outString = writer.toString();
 
-        System.out.println("clearing cache succeeded. Exit code: " + cmdProc.exitValue());
-        System.out.println(outString);
-
-        // doesn't seem to change anything if we sleep here or not.
-        //TimeUnit.SECONDS.sleep(60);
-        // dummy execution
+        if (cmdProc.exitValue() != 0) {
+          System.out.println(outString);
+          System.out.println("Clearing cache failed. Exit value: " + cmdProc.exitValue());
+          System.exit(-1);
+        }
+        //System.out.println("cleared cache, now sleep");
+        TimeUnit.MILLISECONDS.sleep(2000);
       } catch (Exception e) {
         System.out.println("trying to drop cache failed miserably");
         e.printStackTrace();
@@ -154,6 +155,7 @@ public class MyUtils {
 
   /* Executes the given sql using plain old jdbc connection without calcite.
    * Postgres would do its own usual set of optimizations etc.
+   * FIXME: try to decompose common parts with executeNode.
    */
   public static ExecutionResult executeSql(String sql,
                                            boolean getTrueCardinality,
@@ -163,6 +165,7 @@ public class MyUtils {
 		ExecutionResult execResult = null;
     ResultSet rs = null;
 		Connection con = null;
+    PreparedStatement ps = null;
 
     if (clearCache) {
         clearCache();
@@ -172,10 +175,14 @@ public class MyUtils {
       con = DriverManager.getConnection(params.pgUrl, params.user,
                                           params.pwd);
 			//Statement stmt = con.createStatement();
-      PreparedStatement ps = con.prepareStatement(sql);
-
+      ps = con.prepareStatement(sql);
+      ps.setQueryTimeout(params.maxExecutionTime);
       long start = System.currentTimeMillis();
-      rs = ps.executeQuery();
+      try {
+        rs = ps.executeQuery();
+      } catch (Exception e) {
+        // do nothing, since this would be triggered by the queryTimeOut.
+      }
       long end = System.currentTimeMillis();
 			//boolean status = stmt.execute(sql);
       // should only time it after getting the result set to make it comparable
@@ -183,9 +190,8 @@ public class MyUtils {
       //rs = stmt.getResultSet();
       //long end = System.currentTimeMillis();
       long runtime = end - start;
-      System.out.println("executeSql runtime: " + runtime);
 			// this can be an expensive operation, so only do it if really needed.
-			if (params.verifyResults || getTrueCardinality) {
+			if ((params.verifyResults || getTrueCardinality) && rs != null) {
 				execResult = getResultSetHash(rs);
 				execResult.runtime = runtime;
 			} else {
@@ -201,7 +207,8 @@ public class MyUtils {
 
     try {
       con.close();
-      rs.close();
+      ps.close();
+      if (rs != null) rs.close();
     } catch (Exception e) {
       e.printStackTrace();
       // no good way to handle this (?)
@@ -223,9 +230,6 @@ public class MyUtils {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (clearCache) {
         clearCache();
-        // dummy execution
-        //System.out.println("dummy execution, ignore results");
-        //executeNode(node, false, false);
     }
     ResultSet rs = null;
     PreparedStatement ps = null;
@@ -239,14 +243,16 @@ public class MyUtils {
       curConn.setAutoCommit(true);
       RelRunner runner = curConn.unwrap(RelRunner.class);
       ps = runner.prepare(node);
-      ps.setQueryTimeout(1000000);
+      ps.setQueryTimeout(params.maxExecutionTime);
       long start = System.currentTimeMillis();
-      System.out.println("executing node");
-      rs = ps.executeQuery();
+
+      try {
+        rs = ps.executeQuery();
+      } catch (Exception e) {
+        // do nothing, since this would be triggered by the queryTimeOut.
+      }
       long end = System.currentTimeMillis();
       runtime = end - start;
-      System.out.println("execution time: " + runtime);
-
 			// this can be an expensive operation, so only do it if really needed.
 			if (params.verifyResults || getTrueCardinality) {
 				execResult = getResultSetHash(rs);
@@ -292,7 +298,7 @@ public class MyUtils {
       //TimeUnit.SECONDS.sleep(2);
       curConn.close();
       ps.close();
-      rs.close();
+      if (rs != null) rs.close();
     } catch (Exception e) {
       e.printStackTrace();
       // no good way to handle this (?)

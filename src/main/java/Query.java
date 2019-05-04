@@ -18,6 +18,7 @@ public class Query {
 
   // will represent postgres, mysql, monetdb runtimes
   HashMap<String, Long> dbmsRuntimes;
+  HashMap<String, ArrayList<Long>> dbmsAllRuntimes;
   // key will be the join order of the algorithm. Saving for each join order so
   // we can avoid re-running queries
   HashMap<List<Integer>, Double> RLRuntimes;
@@ -35,6 +36,7 @@ public class Query {
     costs = new HashMap<String, Double>();
     planningTimes = new HashMap<String, Long>();
     dbmsRuntimes = new HashMap<String, Long>();
+    dbmsAllRuntimes = new HashMap<String, ArrayList<Long>>();
   }
 
   public String toJson() {

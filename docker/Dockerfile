@@ -7,3 +7,4 @@ ENV POSTGRES_USER=imdb
 ENV POSTGRES_PASSWORD=imdb
 # scripts in this directory will be run by the postgres docker init script
 COPY ./init_imdb.sh /docker-entrypoint-initdb.d/
+COPY ./fkindexes.sql /var/lib/postgresql/
