@@ -47,41 +47,6 @@ class Main {
     return cmd;
   }
 
-  private static void updateQueries(int nextQuery, ArrayList<Integer> trainQueries,
-      ArrayList<Integer> testQueries)
- {
-    System.out.println("***************************");
-    System.out.println("running query " + nextQuery);
-    System.out.println("***************************");
-    if (nextQuery == -1) {
-      // even version
-      for (int i = 0; i < 113; i++) {
-        if (i % 2 == 0) {
-          trainQueries.add(i);
-        } else {
-          testQueries.add(i);
-        }
-      }
-    } else if (nextQuery == -2) {
-        // odd version
-        for (int i = 0; i < 113; i++) {
-          if (i % 2 != 0) {
-            trainQueries.add(i);
-          } else {
-            testQueries.add(i);
-          }
-        }
-    } else if (nextQuery == -3) {
-      for (int i = 0; i < 113; i++) {
-        trainQueries.add(i);
-        testQueries.add(i);
-      }
-    } else {
-      trainQueries.add(nextQuery);
-      testQueries.add(nextQuery);
-    }
-  }
-
   public static void main(String[] args) throws Exception
   {
     CommandLine cmd = parseArgs(args);
@@ -113,7 +78,7 @@ class Main {
     System.out.println("exhaustive " + exhaustive);
     System.out.println("left deep search " + leftDeep);
     System.out.println("costModel " + costModel);
-    System.out.println("dataset " + dataset);
+    //System.out.println("dataset " + dataset);
     System.out.println("train " + train);
     System.out.println("execOnDB " + execOnDB);
 
@@ -143,21 +108,15 @@ class Main {
     params.python = python;
     params.clearCache = clearCache;
     params.recomputeFixedPlanners = recomputeFixedPlanners;
+    params.train = train;
 
     try {
-        exp = new QueryOptExperiment(dbUrl, plannerTypes, QueryOptExperiment.QUERIES_DATASET.getDataset(dataset), port, verbose, train, costModel, params);
+        exp = new QueryOptExperiment(dbUrl, plannerTypes, port, verbose, costModel, params);
     } catch (Exception e) {
         throw e;
     }
 
-    ArrayList<Integer> trainQueries = new ArrayList<Integer>();
-    ArrayList<Integer> testQueries = new ArrayList<Integer>();
-
-    updateQueries(nextQuery, trainQueries, testQueries);
-
-    QueryOptExperiment.getZMQServer().curQuerySet = trainQueries;
-    exp.trainQueries = trainQueries;
-    exp.testQueries = testQueries;
+    QueryOptExperiment.getZMQServer().curQuerySet = null;
     exp.start();
   }
 }

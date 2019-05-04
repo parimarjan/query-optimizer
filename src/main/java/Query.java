@@ -5,7 +5,8 @@ import com.google.gson.Gson;
 
 public class Query {
 
-  public String fileName;
+  // public String fileName;
+  public String queryName;
   public String sql;
 
   // FIXME: maybe instead of having a million maps, we just have a queryPlanner
@@ -23,11 +24,9 @@ public class Query {
   HashMap<List<Integer>, Double> RLRuntimes;
 
   // TODO: add alternative init methods
-  public Query(File f) throws Exception {
-    fileName = f.getName();
-    sql = FileUtils.readFileToString(f);
-    sql = queryRewriteForCalcite(sql);
-
+  public Query(String queryName, String querySql) throws Exception {
+    this.queryName = queryName;
+    this.sql = queryRewriteForCalcite(querySql);
     // initialize all the guys
     resultVerifier = new HashMap<String, Integer>();
     //plans = new HashMap<String, String>();

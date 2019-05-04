@@ -20,13 +20,13 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.commons.io.FileUtils;
 import java.io.File;
 import java.util.concurrent.ThreadLocalRandom;
-
 // experimental:
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.io.FileUtils;
 
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
@@ -102,39 +102,6 @@ public class QueryOptExperiment {
   /* actual volcanoPlanners generated using the above rules */
   private ArrayList<Planner> volcanoPlanners;
 
-  public enum QUERIES_DATASET
-  {
-    JOB,
-    ORIG_JOB,
-    SIMPLE;
-    public String getDatasetPath() {
-      switch(this){
-          case ORIG_JOB:
-              return "./orig-join-order-benchmark/";
-          case JOB:
-              return "./join-order-benchmark/";
-          case SIMPLE:
-              return "./simple-queries/";
-          default:
-              return "";
-      }
-    }
-
-    public static QUERIES_DATASET getDataset(String ds)
-    {
-      switch (ds) {
-        case "JOB":
-          return JOB;
-        case "SIMPLE":
-          return SIMPLE;
-        default:
-          System.err.println("unsupported dataset");
-          System.exit(-1);
-      }
-      return null;
-    }
-  }
-
   /* keeps all the pluggable parameters for the experiment, mostly set through
    * the command line parsing in Main.java */
   public static class Params {
@@ -160,6 +127,7 @@ public class QueryOptExperiment {
     public String cardinalitiesModel = "";
     public String cardinalityError = "noError";
     public Integer cardErrorRange = 10;
+    public boolean train = false;
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
@@ -169,7 +137,6 @@ public class QueryOptExperiment {
   private static Params params;
 
   // FIXME: move all these to Params
-  public ArrayList<Query> allSqlQueries;
   public static ZeroMQServer zmq;
 
   // command line flags, parsed by Main.java. See the definitions / usage
@@ -180,8 +147,8 @@ public class QueryOptExperiment {
   private static boolean train;
   private static Query currentQuery;
 
-  public ArrayList<Integer> trainQueries;
-  public ArrayList<Integer> testQueries;
+  public static ArrayList<Query> trainQueries = null;
+  public static ArrayList<Query> testQueries = null;
   // testing if features were set correctly
   public MyMetadataQuery mq;
 
@@ -198,13 +165,13 @@ public class QueryOptExperiment {
    * @dataset
    */
   public QueryOptExperiment(String dbUrl, ArrayList<PLANNER_TYPE>
-      plannerTypes, QUERIES_DATASET queries, int port,
-      boolean verbose, boolean train, String costModelName,
+      plannerTypes, int port,
+      boolean verbose, String costModelName,
       Params params) throws SQLException
   {
     this.params = params;
-    // FIXME: make this as a variable arg.
-    this.train = train;
+    // starts in training mode
+    //this.train = true;
     this.costModelName = costModelName;
     this.verbose = verbose;
     this.dbUrl = dbUrl;
@@ -223,29 +190,11 @@ public class QueryOptExperiment {
       Planner planner = Frameworks.getPlanner(bld.build());
       volcanoPlanners.add(planner);
     }
-
-    // load in the sql queries dataset
-    allSqlQueries = new ArrayList<Query>();
-    File dir = new File(queries.getDatasetPath());
-    File[] listOfFiles = dir.listFiles();
-    for (File f : listOfFiles) {
-      // FIXME: use regex to avoid index files etc.
-      String fn = f.getName();
-      if (fn.contains("fk") || fn.contains("schema")) continue;
-      if (f.getName().contains(".sql")) {
-        try {
-          Query q = new Query(f);
-          allSqlQueries.add(q);
-        } catch (Exception e) {
-          System.err.println("couldn't load query from file: " + f.getName());
-        }
-      }
-    }
   }
 
   // static setter functions
   public static void setTrainMode(boolean mode) {
-    train = mode;
+    params.train = mode;
   }
 
   // static getter functions.
@@ -270,6 +219,29 @@ public class QueryOptExperiment {
     return zmq;
   }
 
+  public static void setQueries(String mode, HashMap<String, String> queries)
+  {
+    ArrayList<Query> queryList = null;
+    if (mode.equals("train")) {
+      trainQueries = new ArrayList<Query>();
+      queryList = trainQueries;
+    } else {
+      testQueries = new ArrayList<Query>();
+      queryList = testQueries;
+    }
+    try {
+      for (String queryName : queries.keySet()) {
+        queryList.add(new Query(queryName, queries.get(queryName)));
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
+    System.out.println(trainQueries);
+    System.out.println(testQueries);
+    if (verbose) System.out.println("successfully setQueries!");
+  }
+
   /* FIXME: finalize queries semantics AND write explanation.
    * FIXME: used for both train and test, change name to reflect that.
    */
@@ -279,16 +251,21 @@ public class QueryOptExperiment {
     // choose a new
     int numSuccessfulQueries = 0;
     int numFailedQueries = 0;
-    // probably don't need this line
-    // zmq.curQuerySet = queries;
-    //
     // start a server, and wait for a command.
     if (params.python) zmq.waitForClientTill("getAttrCount");
     int nextQuery = -1;
-    ArrayList<Integer> queries;
+    ArrayList<Query> queries;
     // TODO: ugh clean up the way i handle ordering etc.
     boolean alreadyTesting = false;
     while (true) {
+
+      if (trainQueries == null) {
+        zmq.waitForClientTill("setTrainQueries");
+      }
+
+      //if (testQueries == null) {
+        //zmq.waitForClientTill("setTestQueries");
+      //}
 
       // at this point, all the other planners would have executed on the
       // current query as well, so all the stats about it would be updated in
@@ -296,7 +273,7 @@ public class QueryOptExperiment {
       if (params.python) zmq.waitForClientTill("getQueryInfo");
       if (params.python) zmq.waitForClientTill("reset");
 
-      if (train) {
+      if (params.train) {
         alreadyTesting = false;
         queries = trainQueries;
         // FIXME: is deterministic order ok always?
@@ -311,17 +288,7 @@ public class QueryOptExperiment {
         }
       }
       // FIXME: simplify this
-      Query query = allSqlQueries.get(queries.get(nextQuery));
-      // if we are using file cardinalities and this query is not in
-      // MyMetadataQuery's file, then we skip it.
-      if (params.cardinalitiesModel.equals("file")) {
-        String fileName = "join-order-benchmark/" + query.fileName;
-        HashMap<String, Long> qCards = this.mq.cards.get(fileName);
-        if (qCards == null) {
-          if (verbose) System.out.println("skipping " + fileName + " because it is not in cardinalities file.");
-          continue;
-        }
-      }
+      Query query = queries.get(nextQuery);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
       String sqlQuery = query.sql;
@@ -333,7 +300,6 @@ public class QueryOptExperiment {
         break;
       }
       zmq.reset = false;
-      System.out.println("going to execute: " + query.fileName);
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
           boolean success = planAndExecuteQuery(query, i);
@@ -365,6 +331,7 @@ public class QueryOptExperiment {
   {
     Planner planner = volcanoPlanners.get(plannerNum);
     String plannerName = plannerTypes.get(plannerNum).name();
+    System.out.println("planAndExecuteQuery with: " + plannerName);
     // Need to do this every time we reuse a planner
     planner.close();
     planner.reset();
