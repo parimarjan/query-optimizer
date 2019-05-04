@@ -139,25 +139,25 @@ public class MyMetadataQuery extends RelMetadataQuery {
       for (String tN : tableNames) {
         tableKey += " " + tN;
       }
-      if (!tableKey.contains("null")) {
+      //if (!tableKey.contains("null")) {
         //System.out.println("filename: " + query.fileName);
-        String fileName = "join-order-benchmark/" + query.fileName;
-        HashMap<String, Long> qCards = cards.get(fileName);
-        if (qCards == null) {
-          System.out.println("qCards is null!");
-          System.exit(-1);
-        } else {
-          Long rowCountLong = qCards.get(tableKey);
-          //System.out.println("found rowCount from file!: " + rowCount);
-          if (rowCountLong != null) {
-            rowCount = rowCountLong.doubleValue();
-          }
-          //System.out.println("row count was null!");
-          //System.out.println("fileName: " + query.fileName);
-          //System.out.println("tableKey: " + tableKey);
+        //String fileName = "join-order-benchmark/" + query.fileName;
+        //HashMap<String, Long> qCards = cards.get(fileName);
+        //if (qCards == null) {
+          //System.out.println("qCards is null!");
           //System.exit(-1);
-        }
-      }
+        //} else {
+          //Long rowCountLong = qCards.get(tableKey);
+          ////System.out.println("found rowCount from file!: " + rowCount);
+          //if (rowCountLong != null) {
+            //rowCount = rowCountLong.doubleValue();
+          //}
+          ////System.out.println("row count was null!");
+          ////System.out.println("fileName: " + query.fileName);
+          ////System.out.println("tableKey: " + tableKey);
+          ////System.exit(-1);
+        //}
+      //}
     }
     if (rowCount == null) {
       // Default: use true cardinalities for the base tables, and calcite's

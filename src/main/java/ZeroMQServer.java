@@ -5,6 +5,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.*;
 import java.util.*;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 // FIXME: replace all usage of sqlQuery + caching to use Query object, and
 // caching old values will be handled by it.
@@ -105,6 +107,17 @@ public class ZeroMQServer {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     switch (msg)
     {
+      case "setQueries":
+        resp = "";
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        String mode = new String(request);
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        String jsonStr = new String(request);
+        Gson gson = new Gson();
+        QueryOptExperiment.setQueries(mode, gson.fromJson(jsonStr, new TypeToken<HashMap<String, String>>() {}.getType()));
+        break;
       case "setCardinalityError":
         try {
           resp = "";
@@ -270,6 +283,7 @@ public class ZeroMQServer {
     if (verbose) System.out.println("wait for client till: " + breakCommand);
     try {
       while (!reset) {
+      //while (true) {
         String cmd = waitForCommand();
         if (cmd.equals(breakCommand)) {
           //System.out.println("breaking out of waitForClientTill " + breakCommand);
