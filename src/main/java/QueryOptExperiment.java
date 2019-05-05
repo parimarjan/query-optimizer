@@ -264,9 +264,9 @@ public class QueryOptExperiment {
         zmq.waitForClientTill("setTrainQueries");
       }
 
-      //if (testQueries == null) {
-        //zmq.waitForClientTill("setTestQueries");
-      //}
+      if (testQueries == null) {
+        zmq.waitForClientTill("setTestQueries");
+      }
 
       // at this point, all the other planners would have executed on the
       // current query as well, so all the stats about it would be updated in

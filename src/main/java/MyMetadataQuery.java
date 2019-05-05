@@ -96,7 +96,11 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
   @Override
   public Double getRowCount(RelNode rel) {
-    // FIXME: more error checking needs to be done here!!!!
+
+    // System.out.println("getRowCount");
+    //String sql = MyUtils.relToSql(rel);
+    //System.out.println("sql: " + sql);
+
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
 

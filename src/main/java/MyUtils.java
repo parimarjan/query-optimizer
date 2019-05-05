@@ -308,6 +308,59 @@ public class MyUtils {
     return execResult;
   }
 
+  /* @node: node to deconstruct to sql
+   */
+  public static String relToSql(RelNode node)
+  {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    ResultSet rs = null;
+    PreparedStatement ps = null;
+    CalciteConnection curConn = null;
+    String sqlString = "";
+
+    try {
+      curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
+      curConn.setAutoCommit(true);
+      RelRunner runner = curConn.unwrap(RelRunner.class);
+      ps = runner.prepare(node);
+      System.out.println("ps: " + ps);
+      ps.setQueryTimeout(1);
+      try {
+        rs = ps.executeQuery();
+      } catch (Exception e) {
+        // do nothing, since this would be triggered by the queryTimeOut.
+        e.printStackTrace();
+      }
+      String executedQuery = rs.getStatement().toString();
+      System.out.println("executedQuery: " + executedQuery);
+    } catch (Exception e) {
+      e.printStackTrace();
+
+      try {
+        curConn.close();
+        ps.close();
+      } catch (Exception e2) {
+        e2.printStackTrace();
+        System.exit(-1);
+      }
+      return null;
+    }
+    /* clean up the remaining used resources */
+
+    try {
+      //TimeUnit.SECONDS.sleep(2);
+      curConn.close();
+      ps.close();
+      if (rs != null) rs.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      // no good way to handle this (?)
+      System.exit(-1);
+    }
+
+    return sqlString;
+  }
+
   public static ExecutionResult getResultSetHash(ResultSet res)
   {
     String combinedResults = "";
