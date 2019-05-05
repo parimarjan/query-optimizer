@@ -125,8 +125,9 @@ public class QueryOptExperiment {
     // clear cache after every execution
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
-    public String cardinalityError = "noError";
-    public Integer cardErrorRange = 10;
+    public String cardinalitiesModelFile = "./pg.json";
+    //public String cardinalityError = "noError";
+    //public Integer cardErrorRange = 10;
     // num reps for runtimes
     public Integer numExecutionReps = 1;
     public boolean train = false;
@@ -239,8 +240,6 @@ public class QueryOptExperiment {
       e.printStackTrace();
       System.exit(-1);
     }
-    System.out.println(trainQueries);
-    System.out.println(testQueries);
     if (verbose) System.out.println("successfully setQueries!");
   }
 

@@ -59,7 +59,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
   // FIXME: temporary solution. make this general purpose.
   private final String BASE_CARDINALITIES_FILE_NAME = "cardinalities.ser";
   public HashMap<String, HashMap<String, Double>> trueBaseCardinalities;
-  private final String CARDINALITIES_FILE = "test.json";
+  // private final String CARDINALITIES_FILE = "test.json";
   public HashMap<String, HashMap<String, Long>> cards;
 
   /**
@@ -80,7 +80,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
     }
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (params.cardinalitiesModel.equals("file")) {
-      File file = new File(CARDINALITIES_FILE);
+      File file = new File(params.cardinalitiesModelFile);
       String jsonStr = null;
       try {
         jsonStr = FileUtils.readFileToString(file, "UTF-8");
@@ -100,34 +100,6 @@ public class MyMetadataQuery extends RelMetadataQuery {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
 
-    // trying to get sql query here FAILS because VolcanoPlanner's RelSubset
-    // doesn't have a RelToSqlConverter implementation...
-    //try {
-      //if (true) {
-				//if (rel instanceof RelSubset) {
-					//// this seems like it should need special handling, but it probably wraps
-					//// around either Filter / TableScan, so it will be handled when this
-					//// function is called again.
-					////System.out.println("case 4");
-					//return super.getRowCount(rel);
-				//} else {
-          //System.out.println(rel);
-					//RelToSqlConverter relToSqlConverter	= new RelToSqlConverter(AnsiSqlDialect.DEFAULT);
-					//System.out.println("got rel2Sql!");
-					//RelToSqlConverter.Result res = relToSqlConverter.visitChild(0, rel);
-					//SqlNode sqlNode = res.asQueryOrValues();
-					//String result = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT, false).getSql();
-					//System.out.println(result);
-					////Result sqlres = relSql.visit(rel);
-					////Result sqlres = relSql.result(rel);
-					////System.out.println(sqlRes);
-					////System.exit(-1);
-				//}
-		//}
-    //} catch (Exception e) {
-      //e.printStackTrace();
-      ////System.exit(-1);
-    //}
     // in this case, the provided cardinality file should have entries for
     // each of the needed queries.
     // TODO: explain the format better.
@@ -139,25 +111,28 @@ public class MyMetadataQuery extends RelMetadataQuery {
       for (String tN : tableNames) {
         tableKey += " " + tN;
       }
-      //if (!tableKey.contains("null")) {
-        //System.out.println("filename: " + query.fileName);
-        //String fileName = "join-order-benchmark/" + query.fileName;
-        //HashMap<String, Long> qCards = cards.get(fileName);
-        //if (qCards == null) {
-          //System.out.println("qCards is null!");
-          //System.exit(-1);
-        //} else {
-          //Long rowCountLong = qCards.get(tableKey);
-          ////System.out.println("found rowCount from file!: " + rowCount);
-          //if (rowCountLong != null) {
-            //rowCount = rowCountLong.doubleValue();
-          //}
-          ////System.out.println("row count was null!");
-          ////System.out.println("fileName: " + query.fileName);
-          ////System.out.println("tableKey: " + tableKey);
-          ////System.exit(-1);
-        //}
-      //}
+      if (!tableKey.contains("null")) {
+        System.out.println("filename: " + query.queryName);
+        String fileName = "join-order-benchmark/" + query.queryName;
+        HashMap<String, Long> qCards = cards.get(fileName);
+        if (qCards == null) {
+          System.out.println("qCards is null!");
+          System.exit(-1);
+        } else {
+          Long rowCountLong = qCards.get(tableKey);
+          //System.out.println("found rowCount from file!: " + rowCount);
+          if (rowCountLong != null) {
+            rowCount = rowCountLong.doubleValue();
+            //System.out.println("tableKey: " + tableKey);
+            //System.out.println("rowCount: " + rowCount);
+            return rowCount;
+          }
+          System.out.println("row count was null!");
+          System.out.println("fileName: " + query.queryName);
+          System.out.println("tableKey: " + tableKey);
+          System.exit(-1);
+        }
+      }
     }
     if (rowCount == null) {
       // Default: use true cardinalities for the base tables, and calcite's
@@ -180,97 +155,16 @@ public class MyMetadataQuery extends RelMetadataQuery {
           //System.out.println("case 2");
           rowCount = super.getRowCount(rel);
         }
-        //System.out.println("case 3");
       } else if (rel instanceof RelSubset) {
         // this seems like it should need special handling, but it probably wraps
         // around either Filter / TableScan, so it will be handled when this
         // function is called again.
-        //System.out.println("case 4");
         rowCount = super.getRowCount(rel);
       }
       if (rowCount == null) {
         //System.out.println("case 5");
         rowCount = super.getRowCount(rel);
       }
-    }
-
-    // don't need to do anything if no error
-    if (params.cardinalityError.equals("shiftedError")) {
-      rowCount += 100.00;
-    } else if (params.cardinalityError.equals("gaussianError")) {
-      Random rng = new Random();
-      rowCount += rng.nextGaussian() * params.cardErrorRange + params.cardErrorRange;
-    } else if (params.cardinalityError.equals("sameDirectionError")) {
-      Random rng = new Random();
-      rowCount += Math.abs(rng.nextGaussian() * params.cardErrorRange
-              + params.cardErrorRange);
-    } else if (params.cardinalityError.equals("nearestPowerOfTwo")) {
-      rowCount = Math.ceil(Math.log(rowCount)/Math.log(2));
-    } else if (params.cardinalityError.equals("randomError")) {
-      Random rng = new Random();
-      rowCount = Math.abs(rng.nextGaussian() * params.cardErrorRange
-              + params.cardErrorRange);
-    } else if (params.cardinalityError.equals("nearest1000")) {
-      rowCount = (Double) (Math.round(rowCount/1000.0) * 1000.0);
-    } else if (params.cardinalityError.equals("nearest10000")) {
-      rowCount = (Double) (Math.round(rowCount/10000.0) * 10000.0);
-    } else if (params.cardinalityError.equals("nearest100000")) {
-      rowCount = (Double) (Math.round(rowCount/100000.0) * 100000.0);
-    } else if (params.cardinalityError.equals("uniformError")) {
-      //Integer errRadius = params.cardErrorRange.integerValue();
-      Integer errRadius = params.cardErrorRange / 2;
-      rowCount += (Double)
-        ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-    } else if (params.cardinalityError.equals("uniformNumTableError")) {
-      int numTables = tableNames.size();
-      Integer errRadius = params.cardErrorRange / 2;
-      errRadius = errRadius*(numTables-1);
-      rowCount += (Double)
-        ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-    } else if (params.cardinalityError.equals("mixedError")) {
-      int NUM_RANDS = 4;
-      int randNum = ThreadLocalRandom.current().nextInt(0, NUM_RANDS);
-      if (randNum % NUM_RANDS == 0) {
-        // unifrom error.
-        Integer errRadius = params.cardErrorRange / 2;
-        rowCount += (Double)
-          ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-      } else if (randNum % NUM_RANDS == 1) {
-        // gaussian error
-        Random rng = new Random();
-        rowCount += Math.abs(rng.nextGaussian() * params.cardErrorRange
-                + params.cardErrorRange);
-      } else if (randNum % NUM_RANDS == 2) {
-        // uniformNumTableError
-        int numTables = tableNames.size();
-        Integer errRadius = params.cardErrorRange / 2;
-        errRadius = errRadius*(numTables-1);
-        rowCount += (Double)
-          ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-      } else if (randNum % NUM_RANDS == 3) {
-        // leave same
-      }
-    } else if (params.cardinalityError.equals("uniformPercentError")) {
-      Integer errRadius = params.cardErrorRange / 2;
-      Double errPercentage = (Double)
-        ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-      Double change = rowCount * (errPercentage / 100.00);
-      rowCount += change;
-    } else if (params.cardinalityError.equals("uniformMixedPercentError")) {
-      int basePercent = params.cardErrorRange / 2;
-      int randNum = ThreadLocalRandom.current().nextInt(1, 5);
-      Integer errRadius = basePercent*randNum;
-      Double errPercentage = (Double)
-        ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-      Double change = rowCount * (errPercentage / 100.00);
-      rowCount += change;
-    } else if (params.cardinalityError.equals("uniformPercentTablesError")) {
-      int numTables = tableNames.size();
-      Integer errRadius = (params.cardErrorRange / 2)*numTables;
-      Double errPercentage = (Double)
-        ((Integer) ThreadLocalRandom.current().nextInt(-errRadius, errRadius + 1)).doubleValue();
-      Double change = rowCount * (errPercentage / 100.00);
-      rowCount += change;
     }
     return rowCount;
   }

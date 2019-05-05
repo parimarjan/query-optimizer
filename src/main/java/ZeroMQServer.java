@@ -118,24 +118,24 @@ public class ZeroMQServer {
         Gson gson = new Gson();
         QueryOptExperiment.setQueries(mode, gson.fromJson(jsonStr, new TypeToken<HashMap<String, String>>() {}.getType()));
         break;
-      case "setCardinalityError":
-        try {
-          resp = "";
-          responder.send(resp.toString());
-          request = responder.recv(0);
-          String errorType = new String(request);
-          QueryOptExperiment.getParams().cardinalityError = errorType;
-          // also, need to ALWAYS set this to true here, as otherwise it won't
-          // make any sense to just change cardinalities
-          QueryOptExperiment.getParams().recomputeFixedPlanners = true;
-          responder.send(resp.toString());
-          request = responder.recv(0);
-          Integer errorRange = Integer.parseInt(new String(request));
-          params.cardErrorRange = errorRange;
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-        break;
+      //case "setCardinalityError":
+        //try {
+          //resp = "";
+          //responder.send(resp.toString());
+          //request = responder.recv(0);
+          //String errorType = new String(request);
+          //QueryOptExperiment.getParams().cardinalityError = errorType;
+          //// also, need to ALWAYS set this to true here, as otherwise it won't
+          //// make any sense to just change cardinalities
+          //QueryOptExperiment.getParams().recomputeFixedPlanners = true;
+          //responder.send(resp.toString());
+          //request = responder.recv(0);
+          //Integer errorRange = Integer.parseInt(new String(request));
+          //params.cardErrorRange = errorRange;
+        //} catch (Exception e) {
+          //e.printStackTrace();
+        //}
+        //break;
       case "execOnDB":
         QueryOptExperiment.getParams().execOnDB = true;
         resp = "";

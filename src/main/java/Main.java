@@ -18,7 +18,6 @@ class Main {
   {
     Options options = new Options();
     options.addOption(newOption("port", "port number for zmq server"));
-    options.addOption(newOption("query", "query number to run"));
     options.addOption(newOption("clearCache", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("recomputeFixedPlanners", "Recompute plans / costs for all heuristics. Boolean: 0 or 1"));
     options.addOption(newOption("onlyFinalReward", "reward at every step, or only at end. Boolean: 0 or 1"));
@@ -50,7 +49,6 @@ class Main {
   public static void main(String[] args) throws Exception
   {
     CommandLine cmd = parseArgs(args);
-    Integer nextQuery = Integer.parseInt(cmd.getOptionValue("query", "0"));
     Integer port = Integer.parseInt(cmd.getOptionValue("port", "5555"));
 
     /// FIXME: handle booleans correctly
