@@ -112,7 +112,6 @@ public class MyMetadataQuery extends RelMetadataQuery {
         tableKey += " " + tN;
       }
       if (!tableKey.contains("null")) {
-        System.out.println("filename: " + query.queryName);
         String fileName = "join-order-benchmark/" + query.queryName;
         HashMap<String, Long> qCards = cards.get(fileName);
         if (qCards == null) {
@@ -127,11 +126,15 @@ public class MyMetadataQuery extends RelMetadataQuery {
             //System.out.println("rowCount: " + rowCount);
             return rowCount;
           }
-          System.out.println("row count was null!");
-          System.out.println("fileName: " + query.queryName);
-          System.out.println("tableKey: " + tableKey);
-          System.exit(-1);
+          //System.out.println("row count was null!");
+          //System.out.println("fileName: " + query.queryName);
+          //System.out.println("tableKey: " + tableKey);
+          // System.exit(-1);
         }
+      } else {
+        // these seem to happen mostly for aggregate nodes etc.
+        // System.out.println("tableKey had null: " + tableKey);
+        // System.out.println(rel);
       }
     }
     if (rowCount == null) {
@@ -166,6 +169,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
         rowCount = super.getRowCount(rel);
       }
     }
+    //System.out.println("final rowCount returned: " + rowCount);
     return rowCount;
   }
 
