@@ -528,27 +528,36 @@ public class QueryOptExperiment {
   private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq)
 	{
         // testing out the volcano program builder
-        HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
+        //HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
         // addClass does not seem to help
         //hepProgramBuilder.addRuleClass(FilterMergeRule.class);
         //hepProgramBuilder.addRuleClass(LoptOptimizeJoinRule.class);
 
-        hepProgramBuilder.addRuleInstance(FilterMergeRule.INSTANCE);
-        hepProgramBuilder.addRuleInstance(FilterJoinRule.FILTER_ON_JOIN);
-        hepProgramBuilder.addRuleInstance(ProjectMergeRule.INSTANCE);
-        hepProgramBuilder.addRuleInstance(ExhaustiveDPJoinOrderRule.INSTANCE);
+        //hepProgramBuilder.addRuleInstance(FilterMergeRule.INSTANCE);
+        //hepProgramBuilder.addRuleInstance(FilterJoinRule.FILTER_ON_JOIN);
+        //hepProgramBuilder.addRuleInstance(ProjectMergeRule.INSTANCE);
+        //hepProgramBuilder.addRuleInstance(ExhaustiveDPJoinOrderRule.INSTANCE);
         //ImmutableList.of(ExhaustiveDPJoinOrderRule.INSTANCE,
                          //FilterJoinRule.FILTER_ON_JOIN,
                          //ProjectMergeRule.INSTANCE);
 
-        HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+        final HepProgram hep = new HepProgramBuilder()
+            .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+            .addMatchOrder(HepMatchOrder.BOTTOM_UP)
+            .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
+            .addRuleInstance(ExhaustiveDPJoinOrderRule.INSTANCE)
+            .build();
+
+        //HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+        HepPlanner hepPlanner = new HepPlanner(hep);
+
+        // TODO: needed
         hepPlanner.setRoot(node);
-        //hepPlanner.addRule(FilterMergeRule.INSTANCE);
-        //hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
 
         hepPlanner.changeTraits(node, traitSet);
         System.out.println("added all rules to HepPlanner");
-        // TODO: register metadata provider
+
+        //// TODO: register metadata provider
         //final RelMetadataProvider provider = node.getCluster().getMetadataProvider();
 
         // Register RelMetadataProvider with HepPlanner.
@@ -559,6 +568,9 @@ public class QueryOptExperiment {
 
         //final RelMetadataProvider cachingMetaDataProvider = new CachingRelMetadataProvider(ChainedRelMetadataProvider.of(list), hepPlanner);
         //node.accept(new MetaDataProviderModifier(cachingMetaDataProvider));
+        //// END metadata stuff
+
+        // original
         RelNode hepTransform = hepPlanner.findBestExp();
 
         System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));

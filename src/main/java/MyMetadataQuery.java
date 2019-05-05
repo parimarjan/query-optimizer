@@ -34,6 +34,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import java.util.concurrent.ThreadLocalRandom;
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.parser.*;
 
 //import org.apache.calcite.rel.rel2sql;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
@@ -96,14 +98,45 @@ public class MyMetadataQuery extends RelMetadataQuery {
 
   @Override
   public Double getRowCount(RelNode rel) {
+
+		try {
+			if (false) {
+				if (rel instanceof RelSubset) {
+				// this seems like it should need special handling, but it probably wraps
+				// around either Filter / TableScan, so it will be handled when this
+				// function is called again.
+					System.out.println("RelSubset");
+					return super.getRowCount(rel);
+				} else {
+						System.out.println(rel);
+						RelToSqlConverter relToSqlConverter= new RelToSqlConverter(AnsiSqlDialect.DEFAULT);
+						System.out.println("got rel2Sql!");
+						RelToSqlConverter.Result res = relToSqlConverter.visitChild(0, rel);
+						SqlNode sqlNode = res.asQueryOrValues();
+						String result = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT, false).getSql();
+						System.out.println(result);
+						//Result sqlres = relSql.visit(rel);
+						//Result sqlres = relSql.result(rel);
+						//System.out.println(sqlRes);
+						System.exit(-1);
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(-1);
+		}
+
     // FIXME: more error checking needs to be done here!!!!
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
 
+    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
+		System.out.println(tableNames);
+    System.out.println(rel);
+    System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
     // in this case, the provided cardinality file should have entries for
     // each of the needed queries.
     // TODO: explain the format better.
-    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
     Double rowCount = null;
     if (params.cardinalitiesModel.equals("file")) {
       java.util.Collections.sort(tableNames);
