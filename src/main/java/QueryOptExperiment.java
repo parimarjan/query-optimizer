@@ -407,6 +407,10 @@ public class QueryOptExperiment {
     RelTraitSet traitSet =
       planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
 
+		tryHepPlanner(node, traitSet, mq);
+    System.exit(-1);
+		//if (true) return true;
+
     try {
       // using the default volcano planner.
       long start = System.currentTimeMillis();
@@ -520,4 +524,44 @@ public class QueryOptExperiment {
     if (verbose) System.out.println("true cardinality was: " + cardinality);
     return cardinality;
   }
+
+  private void tryHepPlanner(RelNode node, RelTraitSet traitSet, RelMetadataQuery mq)
+	{
+        // testing out the volcano program builder
+        HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
+        // addClass does not seem to help
+        //hepProgramBuilder.addRuleClass(FilterMergeRule.class);
+        //hepProgramBuilder.addRuleClass(LoptOptimizeJoinRule.class);
+
+        hepProgramBuilder.addRuleInstance(FilterMergeRule.INSTANCE);
+        hepProgramBuilder.addRuleInstance(FilterJoinRule.FILTER_ON_JOIN);
+        hepProgramBuilder.addRuleInstance(ProjectMergeRule.INSTANCE);
+        hepProgramBuilder.addRuleInstance(ExhaustiveDPJoinOrderRule.INSTANCE);
+        //ImmutableList.of(ExhaustiveDPJoinOrderRule.INSTANCE,
+                         //FilterJoinRule.FILTER_ON_JOIN,
+                         //ProjectMergeRule.INSTANCE);
+
+        HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+        hepPlanner.setRoot(node);
+        //hepPlanner.addRule(FilterMergeRule.INSTANCE);
+        //hepPlanner.addRule(LoptOptimizeJoinRule.INSTANCE);
+
+        hepPlanner.changeTraits(node, traitSet);
+        System.out.println("added all rules to HepPlanner");
+        // TODO: register metadata provider
+        //final RelMetadataProvider provider = node.getCluster().getMetadataProvider();
+
+        // Register RelMetadataProvider with HepPlanner.
+        //final ArrayList<RelMetadataProvider> list = new ArrayList<RelMetadataProvider>();
+        //list.add(provider);
+        //hepPlanner.registerMetadataProviders(list);
+        //System.out.println("registered metadata provider with hep planner");
+
+        //final RelMetadataProvider cachingMetaDataProvider = new CachingRelMetadataProvider(ChainedRelMetadataProvider.of(list), hepPlanner);
+        //node.accept(new MetaDataProviderModifier(cachingMetaDataProvider));
+        RelNode hepTransform = hepPlanner.findBestExp();
+
+        System.out.println(RelOptUtil.dumpPlan("optimized hep plan:", hepTransform, SqlExplainFormat.TEXT, SqlExplainLevel.NO_ATTRIBUTES));
+        System.out.println("optimized cost is: " + mq.getNonCumulativeCost(hepTransform));
+	}
 }

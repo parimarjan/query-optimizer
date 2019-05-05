@@ -79,6 +79,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
   @Override
   public void onMatch(RelOptRuleCall call)
   {
+    System.out.println("Exhaustive onMatch");
     RelNode orig = call.getRelList().get(0);
     call.getPlanner().setImportance(orig, 0.0);
     //memoizedBestJoins = new HashMap<ImmutableBitSet, ArrayList<ImmutableBitSet[]>>();

@@ -111,6 +111,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
       for (String tN : tableNames) {
         tableKey += " " + tN;
       }
+      System.out.println("tableKey: " + tableKey);
       if (!tableKey.contains("null")) {
         String fileName = "join-order-benchmark/" + query.queryName;
         HashMap<String, Long> qCards = cards.get(fileName);
