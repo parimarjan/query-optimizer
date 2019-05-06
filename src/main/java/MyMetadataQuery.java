@@ -130,10 +130,10 @@ public class MyMetadataQuery extends RelMetadataQuery {
             //System.out.println("rowCount: " + rowCount);
             return rowCount;
           }
-          //System.out.println("row count was null!");
-          //System.out.println("fileName: " + query.queryName);
-          //System.out.println("tableKey: " + tableKey);
-          // System.exit(-1);
+          System.out.println("row count was null!");
+          System.out.println("fileName: " + query.queryName);
+          System.out.println("tableKey: " + tableKey);
+          System.exit(-1);
         }
       } else {
         // these seem to happen mostly for aggregate nodes etc.
