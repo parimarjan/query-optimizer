@@ -107,7 +107,8 @@ public class QueryGraph implements CsgCmpIterator {
     int x = 0;
     String curQuery = QueryOptExperiment.getCurrentQuery().sql;
     HashMap<String, Double> curQueryCard = mq.trueBaseCardinalities.get(curQuery);
-    if (curQueryCard == null) {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    if (curQueryCard == null && !params.cardinalitiesModel.equals("file")) {
       System.out.println("!!!!curQueryCard was null!!!!!");
       curQueryCard = new HashMap<String, Double>();
       mq.trueBaseCardinalities.put(curQuery, curQueryCard);
