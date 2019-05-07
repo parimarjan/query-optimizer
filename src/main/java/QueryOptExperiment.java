@@ -115,7 +115,7 @@ public class QueryOptExperiment {
     public boolean execOnDB = false;
     public boolean verifyResults = false;
     public boolean recomputeFixedPlanners = false;
-    public Integer maxExecutionTime = 600;
+    public Integer maxExecutionTime = 1200;
     public boolean python = true;
     public String dbUrl = "";
     // FIXME: make this command line arg
@@ -335,8 +335,9 @@ public class QueryOptExperiment {
   {
     // run unoptimized sql query. This should use postgres' usual
     // optimizations.
-    Long rt = query.dbmsRuntimes.get(plannerName);
-    if (rt != null) {
+    ArrayList<Long> savedRTs = query.dbmsAllRuntimes.get(plannerName);
+    if (savedRTs != null && savedRTs.size() >= params.numExecutionReps
+          && !plannerName.equals("RL")) {
       // don't re-execute and waste everyone's breathe
       return;
     }
@@ -352,11 +353,6 @@ public class QueryOptExperiment {
         result = MyUtils.executeNode(node, false, params.clearCache);
       }
       System.out.println(plannerName + " took " + result.runtime + "ms");
-      // FIXME: need to separate out which DBMS we run it on as well.
-      //if (i != 0) {
-        //// ignore first run because it seems to take longer ugh.
-        //rts.add(result.runtime);
-      //}
       rts.add(result.runtime);
     }
     query.dbmsAllRuntimes.put(plannerName, rts);
@@ -366,6 +362,7 @@ public class QueryOptExperiment {
       total += val;
     }
     query.dbmsRuntimes.put(plannerName, total / rts.size());
+    query.saveDBMSRuntimes();
   }
 
   private boolean planAndExecuteQuery(Query query, int plannerNum)

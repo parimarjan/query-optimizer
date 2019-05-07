@@ -2,6 +2,9 @@ import java.util.*;
 import java.io.*;
 import org.apache.commons.io.FileUtils;
 import com.google.gson.Gson;
+import java.nio.file.*;
+import java.nio.charset.*;
+import com.google.gson.reflect.TypeToken;
 
 public class Query {
 
@@ -17,15 +20,17 @@ public class Query {
   //public HashMap<String, String> plans;
   public HashMap<String, Integer> resultVerifier;
 
-  // will represent postgres, mysql, monetdb runtimes
+  // will represent runtimes by different algorithms on particular dbms'
   HashMap<String, Long> dbmsRuntimes;
+  String allDBMSRuntimesFile = "allDBMSRuntimes.json";
   HashMap<String, ArrayList<Long>> dbmsAllRuntimes;
   // key will be the join order of the algorithm. Saving for each join order so
   // we can avoid re-running queries
   HashMap<List<Integer>, Double> RLRuntimes;
 
   // TODO: add alternative init methods
-  public Query(String queryName, String querySql) throws Exception {
+  public Query(String queryName, String querySql) throws Exception
+  {
     this.queryName = queryName;
     this.sql = queryRewriteForCalcite(querySql);
     // initialize all the guys
@@ -34,8 +39,71 @@ public class Query {
     joinOrders = new HashMap<String, List<int[]>>();
     costs = new HashMap<String, Double>();
     planningTimes = new HashMap<String, Long>();
+    HashMap<String, HashMap<String, ArrayList<Long>>> allQueryRuntimes
+                        = loadDBMSRuntimes();
+    if (allQueryRuntimes == null) {
+      dbmsAllRuntimes = new HashMap<String, ArrayList<Long>>();
+    } else {
+      dbmsAllRuntimes = allQueryRuntimes.get(queryName);
+    }
+    if (dbmsAllRuntimes == null) {
+      dbmsAllRuntimes = new HashMap<String, ArrayList<Long>>();
+    }
+    //queryName
     dbmsRuntimes = new HashMap<String, Long>();
-    dbmsAllRuntimes = new HashMap<String, ArrayList<Long>>();
+    if (dbmsAllRuntimes.size() != 0) {
+      // average of all keys
+      for (String plannerName : dbmsAllRuntimes.keySet()) {
+        Long total = 0L;
+        ArrayList<Long> rts = dbmsAllRuntimes.get(plannerName);
+        for (Long val : rts) {
+          total += val;
+        }
+        dbmsRuntimes.put(plannerName, total / rts.size());
+      }
+    }
+  }
+
+  public HashMap<String, HashMap<String, ArrayList<Long>>> loadDBMSRuntimes()
+  {
+    Gson gson = new Gson();
+    try {
+      File f = new File(allDBMSRuntimesFile);
+      if (f.exists()) {
+        String jsonStr = new String(Files.readAllBytes(Paths.get(allDBMSRuntimesFile)),
+                            StandardCharsets.UTF_8);
+        return gson.fromJson(jsonStr,
+            new TypeToken<HashMap<String, HashMap<String, ArrayList<Long>>>>() {}.getType());
+      } else {
+        //return new HashMap<String, ArrayList<Long>>();
+        return null;
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
+    return null;
+  }
+
+  public void saveDBMSRuntimes()
+  {
+    // load everything from disk, and then save it back
+    HashMap<String, HashMap<String, ArrayList<Long>>> allQueryRuntimes
+                        = loadDBMSRuntimes();
+    if (allQueryRuntimes == null) {
+      allQueryRuntimes = new HashMap<String, HashMap<String, ArrayList<Long>>>();
+    }
+    allQueryRuntimes.put(queryName, dbmsAllRuntimes);
+    Gson gson = new Gson();
+    String jsonStr = gson.toJson(allQueryRuntimes);
+    try {
+      PrintWriter writer = new PrintWriter(allDBMSRuntimesFile, "UTF-8");
+      writer.println(jsonStr);
+      writer.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
   }
 
   public String toJson() {
