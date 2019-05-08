@@ -129,7 +129,7 @@ public class QueryOptExperiment {
     //public String cardinalityError = "noError";
     //public Integer cardErrorRange = 10;
     // num reps for runtimes
-    public Integer numExecutionReps = 1;
+    public Integer numExecutionReps = 3;
     public boolean train = false;
 
     public Params() {

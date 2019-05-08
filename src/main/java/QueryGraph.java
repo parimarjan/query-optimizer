@@ -118,7 +118,8 @@ public class QueryGraph implements CsgCmpIterator {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
-      if (mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
+      if (!params.cardinalitiesModel.equals("file") && 
+		      mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
       {
         System.out.println("tableName: " + tableName);
         if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
