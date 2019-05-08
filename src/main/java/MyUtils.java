@@ -178,27 +178,28 @@ public class MyUtils {
       ps = con.prepareStatement(sql);
       ps.setQueryTimeout(params.maxExecutionTime);
       long start = System.currentTimeMillis();
+      Long runtime = null;
       try {
         rs = ps.executeQuery();
       } catch (Exception e) {
         // do nothing, since this would be triggered by the queryTimeOut.
+        System.out.println("queryTimeout!");
+        runtime = (long) params.maxExecutionTime * 1000;
       }
-      long end = System.currentTimeMillis();
-			//boolean status = stmt.execute(sql);
-      // should only time it after getting the result set to make it comparable
-      // to the executeNode plans which uses a PreparedStatement.
-      //rs = stmt.getResultSet();
-      //long end = System.currentTimeMillis();
-      long runtime = end - start;
-			// this can be an expensive operation, so only do it if really needed.
-			if ((params.verifyResults || getTrueCardinality) && rs != null) {
-				execResult = getResultSetHash(rs);
-				execResult.runtime = runtime;
-			} else {
-				// default values
-				execResult = new ExecutionResult();
-				execResult.runtime = runtime;
-			}
+
+      if (runtime == null) {
+          long end = System.currentTimeMillis();
+          runtime = end - start;
+        }
+        // this can be an expensive operation, so only do it if really needed.
+        if ((params.verifyResults || getTrueCardinality) && rs != null) {
+            execResult = getResultSetHash(rs);
+            execResult.runtime = runtime;
+        } else {
+            // default values
+            execResult = new ExecutionResult();
+            execResult.runtime = runtime;
+        }
 
     } catch (Exception e) {
       e.printStackTrace();
@@ -234,7 +235,7 @@ public class MyUtils {
     ResultSet rs = null;
     PreparedStatement ps = null;
     Integer resultHash = -1;
-    Long runtime = -1L;
+    Long runtime = null;
     CalciteConnection curConn = null;
     ExecutionResult execResult = null;
 
@@ -245,23 +246,29 @@ public class MyUtils {
       ps = runner.prepare(node);
       ps.setQueryTimeout(params.maxExecutionTime);
       long start = System.currentTimeMillis();
+      runtime = null;
 
       try {
         rs = ps.executeQuery();
       } catch (Exception e) {
         // do nothing, since this would be triggered by the queryTimeOut.
+        System.out.println("queryTimeout!");
+        runtime = (long) params.maxExecutionTime * 1000;
       }
-      long end = System.currentTimeMillis();
-      runtime = end - start;
-			// this can be an expensive operation, so only do it if really needed.
-			if (params.verifyResults || getTrueCardinality) {
-				execResult = getResultSetHash(rs);
-				execResult.runtime = runtime;
-			} else {
-				// default values
-				execResult = new ExecutionResult();
-				execResult.runtime = runtime;
-			}
+
+      if (runtime == null) {
+          long end = System.currentTimeMillis();
+          runtime = end - start;
+      }
+        // this can be an expensive operation, so only do it if really needed.
+        if (params.verifyResults || getTrueCardinality) {
+            execResult = getResultSetHash(rs);
+            execResult.runtime = runtime;
+        } else {
+            // default values
+            execResult = new ExecutionResult();
+            execResult.runtime = runtime;
+        }
     } catch (Exception e) {
       System.out.println("caught exception while executing query");
       StringWriter errors = new StringWriter();

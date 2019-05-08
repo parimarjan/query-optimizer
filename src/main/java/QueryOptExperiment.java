@@ -129,7 +129,7 @@ public class QueryOptExperiment {
     //public String cardinalityError = "noError";
     //public Integer cardErrorRange = 10;
     // num reps for runtimes
-    public Integer numExecutionReps = 3;
+    public Integer numExecutionReps = 1;
     public boolean train = false;
 
     public Params() {
@@ -356,7 +356,7 @@ public class QueryOptExperiment {
       rts.add(result.runtime);
     }
     ArrayList<Long> savedRts = query.dbmsAllRuntimes.get(plannerName);
-    if (oldRts == null) {
+    if (savedRts == null) {
       savedRts = new ArrayList<Long>();
     }
     //Long average = rts.stream().mapToInt(val -> val).average();

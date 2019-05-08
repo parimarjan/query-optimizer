@@ -254,7 +254,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
 			oos.flush();
 			oos.close();
 		} catch (Exception e) {
-			System.out.println(e);
+			// System.out.println(e);
 		}
   }
 
@@ -266,7 +266,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
       ois.close();
       return cards;
     } catch (Exception e) {
-      System.out.println(e);
+      // System.out.println(e);
     }
     return null;
   }
