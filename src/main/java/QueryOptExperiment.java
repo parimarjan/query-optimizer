@@ -355,12 +355,17 @@ public class QueryOptExperiment {
       System.out.println(plannerName + " took " + result.runtime + "ms");
       rts.add(result.runtime);
     }
-    query.dbmsAllRuntimes.put(plannerName, rts);
+    ArrayList<Long> savedRts = query.dbmsAllRuntimes.get(plannerName);
+    if (oldRts == null) {
+      savedRts = new ArrayList<Long>();
+    }
     //Long average = rts.stream().mapToInt(val -> val).average();
     Long total = 0L;
     for (Long val : rts) {
       total += val;
+      savedRts.add(val);
     }
+    query.dbmsAllRuntimes.put(plannerName, savedRts);
     query.dbmsRuntimes.put(plannerName, total / rts.size());
     query.saveDBMSRuntimes();
   }
