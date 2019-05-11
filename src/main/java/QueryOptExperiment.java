@@ -131,6 +131,7 @@ public class QueryOptExperiment {
     // num reps for runtimes
     public Integer numExecutionReps = 1;
     public boolean train = false;
+    public String runtimeFileName = "allQueryRuntimes.json";
 
     public Params() {
       // FIXME: take json / toml etc. input to parse the parameters.
