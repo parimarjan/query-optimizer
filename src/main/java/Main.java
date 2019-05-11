@@ -18,6 +18,7 @@ class Main {
   {
     Options options = new Options();
     options.addOption(newOption("port", "port number for zmq server"));
+    options.addOption(newOption("maxExecutionTime", "Query Timeout for execution on DBMS"));
     options.addOption(newOption("numExecutionReps", "number of times each planner should be executed on dbms"));
     options.addOption(newOption("clearCache", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("recomputeFixedPlanners", "Recompute plans / costs for all heuristics. Boolean: 0 or 1"));
@@ -52,6 +53,7 @@ class Main {
     CommandLine cmd = parseArgs(args);
     Integer port = Integer.parseInt(cmd.getOptionValue("port", "5555"));
     Integer numExecutionReps = Integer.parseInt(cmd.getOptionValue("numExecutionReps", "1"));
+    Integer maxExecutionTime = Integer.parseInt(cmd.getOptionValue("maxExecutionTime", "1200"));
 
     /// FIXME: handle booleans correctly
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);
@@ -82,6 +84,7 @@ class Main {
     System.out.println("train " + train);
     System.out.println("execOnDB " + execOnDB);
     System.out.println("numExecutionReps " + numExecutionReps);
+    System.out.println("maxExecutionTime " + maxExecutionTime);
 
     // FIXME: this should be part of the params interface as well.
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
@@ -111,6 +114,7 @@ class Main {
     params.recomputeFixedPlanners = recomputeFixedPlanners;
     params.train = train;
     params.numExecutionReps = numExecutionReps;
+    params.maxExecutionTime = maxExecutionTime;
 
     try {
         exp = new QueryOptExperiment(dbUrl, plannerTypes, port, verbose, costModel, params);

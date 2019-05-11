@@ -22,7 +22,7 @@ public class Query {
 
   // will represent runtimes by different algorithms on particular dbms'
   HashMap<String, Long> dbmsRuntimes;
-  String allDBMSRuntimesFile = "allDBMSRuntimes.json";
+  String allDBMSRuntimesFile = QueryOptExperiment.getParams().runtimeFileName;
   HashMap<String, ArrayList<Long>> dbmsAllRuntimes;
   // key will be the join order of the algorithm. Saving for each join order so
   // we can avoid re-running queries
