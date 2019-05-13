@@ -190,16 +190,16 @@ public class MyUtils {
       if (runtime == null) {
           long end = System.currentTimeMillis();
           runtime = end - start;
-        }
+      }
         // this can be an expensive operation, so only do it if really needed.
-        if ((params.verifyResults || getTrueCardinality) && rs != null) {
-            execResult = getResultSetHash(rs);
-            execResult.runtime = runtime;
-        } else {
-            // default values
-            execResult = new ExecutionResult();
-            execResult.runtime = runtime;
-        }
+      if ((params.verifyResults || getTrueCardinality) && rs != null) {
+          execResult = getResultSetHash(rs);
+          execResult.runtime = runtime;
+      } else {
+          // default values
+          execResult = new ExecutionResult();
+          execResult.runtime = runtime;
+      }
 
     } catch (Exception e) {
       e.printStackTrace();
