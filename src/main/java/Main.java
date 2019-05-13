@@ -62,7 +62,7 @@ class Main {
     boolean exhaustive = (Integer.parseInt(cmd.getOptionValue("exhaustive", "0")) == 1);
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
-    boolean clearCache = (Integer.parseInt(cmd.getOptionValue("clearCache", "0")) == 1);
+    boolean clearCache = (Integer.parseInt(cmd.getOptionValue("clearCache", "1")) == 1);
     boolean recomputeFixedPlanners = (Integer.parseInt(cmd.getOptionValue("recomputeFixedPlanners", "0")) == 1);
 
     boolean verbose = (Integer.parseInt(cmd.getOptionValue("verbose", "0")) == 1);
@@ -85,6 +85,7 @@ class Main {
     System.out.println("execOnDB " + execOnDB);
     System.out.println("numExecutionReps " + numExecutionReps);
     System.out.println("maxExecutionTime " + maxExecutionTime);
+    System.out.println("clearCache " + clearCache);
 
     // FIXME: this should be part of the params interface as well.
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
