@@ -26,6 +26,14 @@ print("RL/postgres: ", mean)
 print("RL-worst/postgres: ", mean_worst)
 print("RL-best/postgres: ", mean_best)
 
+all_ep_rts = defaultdict(list)
+# for i in range(111):
+for i, rt in enumerate(df["RL"]):
+    all_ep_rts[i].append(rt)
+
+print(all_ep_rts[0])
+pdb.set_trace()
+
 print("RL mean {}, var {}, min {}, max {}".format(df["RL"].mean(),
     df["RL"].var(), df["RL"].min(), df["RL"].max()))
 print("PG mean {}, var {}, min {}, max {}".format(df["postgres"].mean(),
