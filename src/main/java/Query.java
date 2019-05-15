@@ -17,7 +17,7 @@ public class Query {
   public HashMap<String, Double> costs;
   public HashMap<String, List<int[]>> joinOrders;
   public HashMap<String, Long> planningTimes;
-  //public HashMap<String, String> plans;
+  public HashMap<String, String> plans;
   public HashMap<String, Integer> resultVerifier;
 
   // will represent runtimes by different algorithms on particular dbms'
@@ -38,6 +38,7 @@ public class Query {
     //plans = new HashMap<String, String>();
     joinOrders = new HashMap<String, List<int[]>>();
     costs = new HashMap<String, Double>();
+    plans = new HashMap<String, String>();
     planningTimes = new HashMap<String, Long>();
     HashMap<String, HashMap<String, ArrayList<Long>>> allQueryRuntimes
                         = loadDBMSRuntimes();

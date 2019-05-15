@@ -425,15 +425,14 @@ public class QueryOptExperiment {
           + " is: " + optCost);
       //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
 
-      //String optPlan;
-       //System.out.println(RelOptUtil.dumpPlan("optimized plan:", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+      String optPlan = RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+      query.plans.put(plannerName, optPlan);
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
         execPlannerOnDB(query, plannerName, optimizedNode);
       }
-      // FIXME: save the updated costs to disk, or NOT?
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..
       throw e;
