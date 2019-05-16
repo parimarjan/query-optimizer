@@ -144,8 +144,8 @@ public class MyUtils {
           System.out.println("Clearing cache failed. Exit value: " + cmdProc.exitValue());
           System.exit(-1);
         }
-        //System.out.println("cleared cache, now sleep");
-        TimeUnit.MILLISECONDS.sleep(2000);
+        // TODO: how long should we sleep for here to let postgres start fine?
+        TimeUnit.MILLISECONDS.sleep(4000);
       } catch (Exception e) {
         System.out.println("trying to drop cache failed miserably");
         e.printStackTrace();
@@ -202,6 +202,8 @@ public class MyUtils {
       }
 
     } catch (Exception e) {
+      // TODO: this seems to fail sometimes if postgres hasn't started yet.
+      // Handle that better instead of sleeping longer?
       e.printStackTrace();
       System.exit(-1);
     }
