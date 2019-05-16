@@ -353,7 +353,7 @@ public class QueryOptExperiment {
       } else {
         result = MyUtils.executeNode(node, false, params.clearCache);
       }
-      System.out.println(plannerName + " took " + result.runtime + "ms");
+      System.out.println(plannerName + " took " + result.runtime + "ms" + "for " + query.queryName);
       rts.add(result.runtime);
     }
     ArrayList<Long> savedRts = query.dbmsAllRuntimes.get(plannerName);
