@@ -356,8 +356,8 @@ public class QueryOptExperiment {
       } else {
         result = MyUtils.executeNode(node, false, params.clearCache);
       }
-      System.out.println(plannerName + " took " + result.runtime + "ms" + "for " + query.queryName);
-      rts.add(result.runtime);
+      System.out.println(plannerName + " took " + result.runtime + "ms" + " for " + query.queryName);
+      savedRTs.add(result.runtime);
     }
     Long total = 0L;
     for (Long val : savedRTs) {
