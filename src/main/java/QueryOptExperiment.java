@@ -338,7 +338,7 @@ public class QueryOptExperiment {
     // optimizations.
     ArrayList<Long> savedRTs = query.dbmsAllRuntimes.get(plannerName);
     if (savedRTs == null) {
-	savedRTs = new ArrayList<Long>();
+      savedRTs = new ArrayList<Long>();
     }
 
     if (savedRTs.size() >= params.numExecutionReps
@@ -346,9 +346,9 @@ public class QueryOptExperiment {
       // don't re-execute and waste everyone's breathe
       return;
     }
+    MyUtils.ExecutionResult result = null;
     // run it one extra time
-    for (int i = 0; i < params.numExecutionReps - savedRTs.size(); i++) {
-      MyUtils.ExecutionResult result = null;
+    for (int i = 0; i < 1; i++) {
       if (plannerName.equals("postgres")) {
         // run N times, and store the average
         result = MyUtils.executeSql(query.sql, false,
@@ -359,12 +359,8 @@ public class QueryOptExperiment {
       System.out.println(plannerName + " took " + result.runtime + "ms" + " for " + query.queryName);
       savedRTs.add(result.runtime);
     }
-    Long total = 0L;
-    for (Long val : savedRTs) {
-      total += val;
-    }
     query.dbmsAllRuntimes.put(plannerName, savedRTs);
-    query.dbmsRuntimes.put(plannerName, total / savedRTs.size());
+    query.dbmsRuntimes.put(plannerName, result.runtime);
     query.saveDBMSRuntimes();
   }
 
