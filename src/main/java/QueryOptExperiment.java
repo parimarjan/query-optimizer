@@ -119,9 +119,12 @@ public class QueryOptExperiment {
     public boolean python = true;
     public String dbUrl = "";
     // FIXME: make this command line arg
-    public String pgUrl = "jdbc:postgresql://localhost:5400/imdb";
+    //public String pgUrl = "jdbc:postgresql://localhost:5400/imdb";
+    //public String user = "imdb";
+    //public String pwd = "imdb";
+    public String pgUrl = "jdbc:postgresql://localhost:5432/imdb";
     public String user = "imdb";
-    public String pwd = "imdb";
+    public String pwd = "";
     // clear cache after every execution
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
