@@ -129,7 +129,7 @@ public class MyUtils {
 
   private static void clearCache()
   {
-      //System.out.println("clear cache...");
+      System.out.println("clear cache...");
       try {
         String cmd = "./drop_cache.sh";
         Process cmdProc = Runtime.getRuntime().exec(cmd);
@@ -138,6 +138,7 @@ public class MyUtils {
         InputStream inputStream = cmdProc.getInputStream();
         IOUtils.copy(inputStream, writer, StandardCharsets.UTF_8);
         String outString = writer.toString();
+        System.out.println(outString);
 
         if (cmdProc.exitValue() != 0) {
           System.out.println(outString);
@@ -151,6 +152,7 @@ public class MyUtils {
         e.printStackTrace();
         System.exit(-1);
       }
+      System.out.println("clearCache done!");
   }
 
   /* Executes the given sql using plain old jdbc connection without calcite.

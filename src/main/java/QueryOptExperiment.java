@@ -427,7 +427,7 @@ public class QueryOptExperiment {
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
-        execPlannerOnDB(query, plannerName, optimizedNode);
+        //execPlannerOnDB(query, plannerName, optimizedNode);
       }
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..
