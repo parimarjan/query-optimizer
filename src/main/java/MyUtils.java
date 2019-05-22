@@ -138,7 +138,7 @@ public class MyUtils {
         InputStream inputStream = cmdProc.getInputStream();
         IOUtils.copy(inputStream, writer, StandardCharsets.UTF_8);
         String outString = writer.toString();
-
+	System.out.println(outString);
         if (cmdProc.exitValue() != 0) {
           System.out.println(outString);
           System.out.println("Clearing cache failed. Exit value: " + cmdProc.exitValue());
