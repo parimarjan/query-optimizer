@@ -424,7 +424,11 @@ public class QueryOptExperiment {
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
-        execPlannerOnDB(query, plannerName, optimizedNode);
+	if (!params.train) {
+	  execPlannerOnDB(query, plannerName, optimizedNode);
+	} else if (plannerName.equals("RL")) {
+	  execPlannerOnDB(query, plannerName, optimizedNode);
+	}
       }
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..
@@ -432,7 +436,7 @@ public class QueryOptExperiment {
     }
 
     // FIXME: to execute on postgres, just execute plain sql
-    if (params.execOnDB) {
+    if (params.execOnDB && !params.train) {
       execPlannerOnDB(query, "postgres", node);
     }
     return true;
