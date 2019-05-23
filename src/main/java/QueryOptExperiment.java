@@ -348,7 +348,7 @@ public class QueryOptExperiment {
     }
     MyUtils.ExecutionResult result = null;
     // run it one extra time
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 3; i++) {
       if (plannerName.equals("postgres")) {
         // run N times, and store the average
         result = MyUtils.executeSql(query.sql, false,
