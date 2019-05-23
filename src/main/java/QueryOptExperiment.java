@@ -423,6 +423,9 @@ public class QueryOptExperiment {
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
+      if (plannerName.equals("RL")) {
+	return true;
+      }
       if (params.execOnDB) {
 	if (!params.train) {
 	  execPlannerOnDB(query, plannerName, optimizedNode);
