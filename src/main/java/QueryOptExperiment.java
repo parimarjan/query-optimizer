@@ -114,7 +114,7 @@ public class QueryOptExperiment {
     //public boolean onlyFinalReward = false;
     public boolean execOnDB = false;
     public boolean verifyResults = false;
-    public boolean recomputeFixedPlanners = false;
+    public boolean recomputeFixedPlanners = true;
     public Integer maxExecutionTime = 1200;
     public boolean python = true;
     public String dbUrl = "";

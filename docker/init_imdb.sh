@@ -6,4 +6,4 @@ sed -i 's/shared_buffers = 128MB/shared_buffers = 4096MB/g' /var/lib/postgresql/
 wget -O /var/lib/postgresql/pg_imdb.tar cs.brandeis.edu/~rcmarcus/pg_imdb.tar
 tar xfv /var/lib/postgresql/pg_imdb.tar -C /var/lib/postgresql/
 pg_restore -v -d imdb -U imdb /var/lib/postgresql/pg_imdb
-psql -U imdb < /var/lib/postgresql/fkindexes.sql
+# psql -U imdb < /var/lib/postgresql/fkindexes.sql
