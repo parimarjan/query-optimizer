@@ -74,11 +74,25 @@ public class MyJoinUtils {
       } else {
         // Create a program that gathers together joins as a MultiJoin.
         // Note: this is important to let the LoptOptimizeJoinRule fire later.
+
+        //FilterTableScanRule.INSTANCE,
+        //FilterProjectTransposeRule.INSTANCE,
+        //FilterJoinRule.FILTER_ON_JOIN,
+        //AggregateExpandDistinctAggregatesRule.INSTANCE,
+        //AggregateReduceFunctionsRule.INSTANCE,
+        //FilterAggregateTransposeRule.INSTANCE);
         final HepProgram hep = new HepProgramBuilder()
-            .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+            //.addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+            //.addRuleInstance(FilterJoinRule.DUMB_FILTER_ON_JOIN)
+            .addRuleInstance(FilterJoinRule.JOIN)
+            //.addRuleInstance(FilterTableScanRule.INSTANCE)
+            //.addRuleInstance(FilterTableScanRule.INSTANCE)
+            //.addRuleInstance(AggregateExpandDistinctAggregatesRule.INSTANCE)
+            //.addRuleInstance(FilterAggregateTransposeRule.INSTANCE)
             .addMatchOrder(HepMatchOrder.BOTTOM_UP)
             .addRuleInstance(JoinToMultiJoinRule.INSTANCE)
             .build();
+
         final Program program1 =
             Programs.of(hep, false, DefaultRelMetadataProvider.INSTANCE);
 

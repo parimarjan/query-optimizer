@@ -107,6 +107,13 @@ public class ZeroMQServer {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     switch (msg)
     {
+      case "setCardinalities":
+        resp = "";
+        responder.send(resp.toString());
+        request = responder.recv(0);
+        String jsonCards = new String(request);
+        QueryOptExperiment.setCardinalities(jsonCards);
+        break;
       case "setQueries":
         resp = "";
         responder.send(resp.toString());

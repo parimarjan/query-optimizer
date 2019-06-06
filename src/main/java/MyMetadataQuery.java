@@ -30,8 +30,8 @@ import java.io.Serializable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.*;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+//import com.google.gson.Gson;
+//import com.google.gson.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -60,7 +60,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
   private final String BASE_CARDINALITIES_FILE_NAME = "cardinalities.ser";
   public HashMap<String, HashMap<String, Double>> trueBaseCardinalities;
   // private final String CARDINALITIES_FILE = "test.json";
-  public HashMap<String, HashMap<String, Long>> cards;
+  //public HashMap<String, HashMap<String, Long>> cards;
 
   /**
    * Returns an instance of RelMetadataQuery. It ensures that cycles do not
@@ -78,28 +78,10 @@ public class MyMetadataQuery extends RelMetadataQuery {
     if (trueBaseCardinalities == null) {
       trueBaseCardinalities = new HashMap<String, HashMap<String, Double>>();
     }
-    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
-    if (params.cardinalitiesModel.equals("file")) {
-      File file = new File(params.cardinalitiesModelFile);
-      String jsonStr = null;
-      try {
-        jsonStr = FileUtils.readFileToString(file, "UTF-8");
-      } catch (Exception e) {
-        e.printStackTrace();
-        System.exit(-1);
-      }
-      Gson gson = new Gson();
-      cards = gson.fromJson(jsonStr, new TypeToken<HashMap<String, HashMap<String, Long>>>() {}.getType());
-      //System.out.println(cards);
-    }
   }
 
   @Override
   public Double getRowCount(RelNode rel) {
-
-    // System.out.println("getRowCount");
-    //String sql = MyUtils.relToSql(rel);
-    //System.out.println("sql: " + sql);
 
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     Query query = QueryOptExperiment.getCurrentQuery();
@@ -109,15 +91,17 @@ public class MyMetadataQuery extends RelMetadataQuery {
     // TODO: explain the format better.
     ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
     Double rowCount = null;
-    if (params.cardinalitiesModel.equals("file")) {
+    if (params.cardinalities != null) {
       java.util.Collections.sort(tableNames);
       String tableKey = "";
       for (String tN : tableNames) {
         tableKey += " " + tN;
       }
       if (!tableKey.contains("null")) {
-        String fileName = "join-order-benchmark/" + query.queryName;
-        HashMap<String, Long> qCards = cards.get(fileName);
+        // FIXME: fix the join-order-benchmark case
+        //String fileName = "join-order-benchmark/" + query.queryName;
+        String key = query.queryName;
+        HashMap<String, Long> qCards = params.cardinalities.get(key);
         if (qCards == null) {
           System.out.println("qCards is null!");
           System.exit(-1);

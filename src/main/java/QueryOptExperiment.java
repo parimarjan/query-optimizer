@@ -28,6 +28,9 @@ import org.apache.calcite.util.ImmutableBitSet;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.io.FileUtils;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
@@ -68,6 +71,15 @@ public class QueryOptExperiment {
         ImmutableList.of(RLJoinOrderRule.INSTANCE,
                          FilterJoinRule.FILTER_ON_JOIN,
                          ProjectMergeRule.INSTANCE);
+    //public static final ImmutableList<RelOptRule> RL_RULES =
+        //ImmutableList.of(RLJoinOrderRule.INSTANCE,
+                      //FilterTableScanRule.INSTANCE,
+                      //FilterProjectTransposeRule.INSTANCE,
+											//FilterJoinRule.FILTER_ON_JOIN,
+											//AggregateExpandDistinctAggregatesRule.INSTANCE,
+											//AggregateReduceFunctionsRule.INSTANCE,
+											//FilterAggregateTransposeRule.INSTANCE);
+
 
     public static final ImmutableList<RelOptRule> BUSHY_RULES =
         ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE,
@@ -132,9 +144,11 @@ public class QueryOptExperiment {
     public Integer numExecutionReps = 1;
     public boolean train = false;
     public String runtimeFileName = "allQueryRuntimes.json";
+    // cardinalities dictionary.
+    public HashMap<String, HashMap<String, Long>> cardinalities = null;
 
     public Params() {
-      // FIXME: take json / toml etc. input to parse the parameters.
+
     }
   }
 
@@ -193,6 +207,19 @@ public class QueryOptExperiment {
       bld.programs(MyJoinUtils.genJoinRule(t.getRules(), 1));
       Planner planner = Frameworks.getPlanner(bld.build());
       volcanoPlanners.add(planner);
+    }
+
+    // let's initialize cardinalities dictionary to given file
+    if (params.cardinalitiesModel.equals("file")) {
+      File file = new File(params.cardinalitiesModelFile);
+      String jsonStr = null;
+      try {
+        jsonStr = FileUtils.readFileToString(file, "UTF-8");
+      } catch (Exception e) {
+        e.printStackTrace();
+        System.exit(-1);
+      }
+      setCardinalities(jsonStr);
     }
   }
 
@@ -260,7 +287,6 @@ public class QueryOptExperiment {
     // TODO: ugh clean up the way i handle ordering etc.
     boolean alreadyTesting = false;
     while (true) {
-
       if (trainQueries == null) {
         zmq.waitForClientTill("setTrainQueries");
       }
@@ -268,6 +294,9 @@ public class QueryOptExperiment {
       if (testQueries == null) {
         zmq.waitForClientTill("setTestQueries");
       }
+
+      // System.out.println("num train queries: " + trainQueries.size());
+      //System.out.println("num test queries: " + testQueries.size());
 
       // at this point, all the other planners would have executed on the
       // current query as well, so all the stats about it would be updated in
@@ -291,6 +320,8 @@ public class QueryOptExperiment {
       }
       // FIXME: simplify this
       Query query = queries.get(nextQuery);
+      System.out.println("nextQuery: " + nextQuery);
+      System.out.println("query: " + query.sql);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
 
@@ -407,6 +438,8 @@ public class QueryOptExperiment {
     try {
       // using the default volcano planner.
       long start = System.currentTimeMillis();
+      String origPlan = RelOptUtil.dumpPlan("", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+      System.out.println(origPlan);
       RelNode optimizedNode = planner.transform(0, traitSet,
               node);
       long planningTime = System.currentTimeMillis() - start;
@@ -519,5 +552,12 @@ public class QueryOptExperiment {
     }
     if (verbose) System.out.println("true cardinality was: " + cardinality);
     return cardinality;
+  }
+
+  public static void setCardinalities(String jsonStr) {
+      Gson gson = new Gson();
+      params.cardinalities = gson.fromJson(jsonStr,
+          new TypeToken<HashMap<String, HashMap<String, Long>>>() {}.getType());
+
   }
 }
