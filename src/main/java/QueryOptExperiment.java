@@ -71,15 +71,6 @@ public class QueryOptExperiment {
         ImmutableList.of(RLJoinOrderRule.INSTANCE,
                          FilterJoinRule.FILTER_ON_JOIN,
                          ProjectMergeRule.INSTANCE);
-    //public static final ImmutableList<RelOptRule> RL_RULES =
-        //ImmutableList.of(RLJoinOrderRule.INSTANCE,
-                      //FilterTableScanRule.INSTANCE,
-                      //FilterProjectTransposeRule.INSTANCE,
-											//FilterJoinRule.FILTER_ON_JOIN,
-											//AggregateExpandDistinctAggregatesRule.INSTANCE,
-											//AggregateReduceFunctionsRule.INSTANCE,
-											//FilterAggregateTransposeRule.INSTANCE);
-
 
     public static final ImmutableList<RelOptRule> BUSHY_RULES =
         ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE,
@@ -194,7 +185,6 @@ public class QueryOptExperiment {
     this.verbose = verbose;
     this.dbUrl = dbUrl;
     this.conn = (CalciteConnection) DriverManager.getConnection(dbUrl);
-    //System.out.println("connection successful!");
     DbInfo.init(conn);
     this.zmq = new ZeroMQServer(port, verbose);
     this.plannerTypes = plannerTypes;
@@ -295,9 +285,6 @@ public class QueryOptExperiment {
         zmq.waitForClientTill("setTestQueries");
       }
 
-      // System.out.println("num train queries: " + trainQueries.size());
-      //System.out.println("num test queries: " + testQueries.size());
-
       // at this point, all the other planners would have executed on the
       // current query as well, so all the stats about it would be updated in
       // the Query struct.
@@ -320,8 +307,8 @@ public class QueryOptExperiment {
       }
       // FIXME: simplify this
       Query query = queries.get(nextQuery);
-      System.out.println("nextQuery: " + nextQuery);
-      System.out.println("query: " + query.sql);
+      //System.out.println("nextQuery: " + nextQuery);
+      //System.out.println("query: " + query.sql);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
 
@@ -439,7 +426,7 @@ public class QueryOptExperiment {
       // using the default volcano planner.
       long start = System.currentTimeMillis();
       String origPlan = RelOptUtil.dumpPlan("", node, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
-      System.out.println(origPlan);
+      //System.out.println(origPlan);
       RelNode optimizedNode = planner.transform(0, traitSet,
               node);
       long planningTime = System.currentTimeMillis() - start;

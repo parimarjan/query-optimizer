@@ -103,7 +103,6 @@ public class RLJoinOrderRule extends RelOptRule {
     //final MyMetadataQuery mq = QueryOptExperiment.getMetadataQuery();
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
 
-    System.out.println("RL onMatch, num factors: " + multiJoin.getNumJoinFactors());
     QueryGraph queryGraph = new QueryGraph(multiJoin, mq, rexBuilder, relBuilder);
     zmq.queryGraph = queryGraph;
 

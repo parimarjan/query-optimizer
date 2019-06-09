@@ -89,19 +89,13 @@ public class QueryGraph implements CsgCmpIterator {
     HashMap<String, Integer> tableOffsets = DbInfo.getAllTableFeaturesOffsets();
     mapToDatabase = new HashMap<Integer, Integer>();
     int totalFieldCount = 0;
-    System.out.println("num factors: " + multiJoin.getNumJoinFactors());
+    //System.out.println("num factors: " + multiJoin.getNumJoinFactors());
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       RelNode rel = multiJoin.getJoinFactor(i);
       String tableName = MyUtils.getTableName(rel);
-      System.out.println(i);
-      System.out.println(rel);
-      System.out.println(tableName);
-      String origPlan = RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
-      System.out.println(origPlan);
       if (tableName == null) {
         System.out.println("tableName null");
-        continue;
-        //System.exit(-1);
+        System.exit(-1);
       }
       Integer offset = tableOffsets.get(tableName);
       assert offset != null;
@@ -125,23 +119,18 @@ public class QueryGraph implements CsgCmpIterator {
       mq.trueBaseCardinalities.put(curQuery, curQueryCard);
     }
     boolean cardinalitiesUpdated = false;
-    System.out.println("num factors: " + multiJoin.getNumJoinFactors());
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
-      System.out.println(i);
-      System.out.println(tableName);
-      System.out.println(rel);
       if (tableName == null) {
         System.out.println("tableName null");
-        continue;
-        //System.exit(-1);
+        System.exit(-1);
       }
       if (!params.cardinalitiesModel.equals("file") &&
 		      mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
       {
-        System.out.println("tableName: " + tableName);
+        //System.out.println("tableName: " + tableName);
         if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
           // if it is NOT a filter block
           if (!RelOptUtil.toString(rel).contains("Filter")) {

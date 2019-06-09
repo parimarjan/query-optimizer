@@ -81,7 +81,6 @@ public class LeftDeepJoinOrderRule extends RelOptRule
     final MyMetadataQuery mq = MyMetadataQuery.instance();
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
 
-    System.out.println("onMatch, num factors: " + multiJoin.getNumJoinFactors());
     // k = 1 case.
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
        HashSet<Integer> factor = new HashSet<Integer>();
