@@ -117,7 +117,7 @@ public class QueryOptExperiment {
     //public boolean onlyFinalReward = false;
     public boolean execOnDB = false;
     public boolean verifyResults = false;
-    public boolean recomputeFixedPlanners = false;
+    public boolean recomputeFixedPlanners = true;
     public Integer maxExecutionTime = 1200;
     public boolean python = true;
     public String dbUrl = "";
@@ -366,7 +366,7 @@ public class QueryOptExperiment {
     }
     MyUtils.ExecutionResult result = null;
     // run it one extra time
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 3; i++) {
       if (plannerName.equals("postgres")) {
         // run N times, and store the average
         result = MyUtils.executeSql(query.sql, false,
@@ -443,6 +443,9 @@ public class QueryOptExperiment {
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
+      //if (plannerName.equals("RL")) {
+	//return true;
+      //}
       if (params.execOnDB) {
 	if (!params.train) {
 	  execPlannerOnDB(query, plannerName, optimizedNode);
