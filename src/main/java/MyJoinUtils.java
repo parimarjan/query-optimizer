@@ -65,7 +65,9 @@ public class MyJoinUtils {
       final int minJoinCount) {
 
     return (planner, rel, requiredOutputTraits, materializations, lattices) -> {
-      requiredOutputTraits.replace(EnumerableConvention.INSTANCE);
+      if (requiredOutputTraits != null) {
+        requiredOutputTraits.replace(EnumerableConvention.INSTANCE);
+      }
       final int joinCount = RelOptUtil.countJoins(rel);
       final Program program;
       if (joinCount < minJoinCount) {

@@ -31,6 +31,13 @@ import org.apache.commons.io.FileUtils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+//import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
+//import org.apache.calcite.rel.RelToSqlConverter;
+//import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.dialect.AnsiSqlDialect;
+import org.apache.calcite.rel.rel2sql.SqlImplementor.Result;
+import org.apache.calcite.sql.SqlNode;
+
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
@@ -419,8 +426,11 @@ public class QueryOptExperiment {
     DbInfo.setCurrentQueryVisibleFeatures(node);
     // very important to do the replace EnumerableConvention thing for
     // mysterious reasons
-    RelTraitSet traitSet =
-      planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+    RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+    // experimental:
+    //RelTraitSet traitSet = planner.getEmptyTraitSet().replace(Convention.NONE);
+    //RelTraitSet traitSet = null;
+    //RelTraitSet traitSet = planner.getEmptyTraitSet();
 
     try {
       // using the default volcano planner.
@@ -432,13 +442,27 @@ public class QueryOptExperiment {
       long planningTime = System.currentTimeMillis() - start;
       if (verbose) System.out.println("planning time: " +
           planningTime);
-      // FIXME: need to use our MetaDataProvider in dumpPlan
       RelOptCost optCost = computeCost(mq, optimizedNode);
       if (verbose) System.out.println("optimized cost for " + plannerName
           + " is: " + optCost);
       //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
 
       String optPlan = RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+      System.out.println(optPlan);
+      int numJoins = MyUtils.countJoins(optimizedNode);
+      System.out.println("numJoins: " + numJoins);
+      System.exit(-1);
+			//MyRelToSqlConverter relToSqlConverter = new MyRelToSqlConverter(AnsiSqlDialect.DEFAULT);
+      //RelToSqlConverter.Result res = relToSqlConverter.visitChild(0, optimizedNode);
+      //final SqlNode sqlNode = relToSqlConverter.visitChild(0, optimizedNode).asStatement();
+
+			//SqlNode sqlNode = res.asQueryOrValues();
+			//String result = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT, false).getSql();
+			//System.out.println(result);
+
+			//Result sqlres = relSql.visit(rel);
+			//Result sqlres = relSql.result(rel);
+			//System.out.println(sqlRes);
       query.plans.put(plannerName, optPlan);
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
@@ -479,7 +503,6 @@ public class QueryOptExperiment {
     // FIXME: not sure if all of these are required?!
     final List<RelTraitDef> traitDefs = new ArrayList<RelTraitDef>();
     traitDefs.add(ConventionTraitDef.INSTANCE);
-    //traitDefs.add(EnumerableConvention.INSTANCE);
     traitDefs.add(RelCollationTraitDef.INSTANCE);
     configBuilder.traitDefs(traitDefs);
     configBuilder.context(Contexts.EMPTY_CONTEXT);

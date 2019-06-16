@@ -42,6 +42,36 @@ import java.nio.charset.StandardCharsets;
 
 public class MyUtils {
 
+  public static int countJoins(RelNode rootRel) {
+    /** Visitor that counts join nodes. */
+    class JoinCounter extends RelVisitor {
+      int joinCount;
+
+      @Override public void visit(RelNode node, int ordinal, RelNode parent) {
+        System.out.println("ordinal: " + ordinal);
+        System.out.println("node: " + node);
+        System.out.println("parent: " + parent);
+        System.out.println(RelOptUtil.toString(node));
+        if (node instanceof Join) {
+          ++joinCount;
+          Join j = (Join) node;
+          RelNode left = j.getLeft();
+          RelNode right = j.getRight();
+          System.out.println("left: " + left);
+          System.out.println("right: " + right);
+        }
+        super.visit(node, ordinal, parent);
+      }
+
+      int run(RelNode node) {
+        go(node);
+        return joinCount;
+      }
+    }
+
+    return new JoinCounter().run(rootRel);
+  }
+
   public static ArrayList<String> getAllTableNames(RelNode rel) {
     if (rel == null) {
       return null;
