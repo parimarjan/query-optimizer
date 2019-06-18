@@ -15,10 +15,11 @@ public class Query {
   // FIXME: maybe instead of having a million maps, we just have a queryPlanner
   // object which keeps track of all this??
   public HashMap<String, Double> costs;
-  public HashMap<String, List<int[]>> joinOrders;
+  //public HashMap<String, List<int[]>> joinOrders;
   public HashMap<String, Long> planningTimes;
   public HashMap<String, String> plans;
   public HashMap<String, Integer> resultVerifier;
+  public HashMap<String, MyUtils.JoinOrder> joinOrders;
 
   // will represent runtimes by different algorithms on particular dbms'
   HashMap<String, Long> dbmsRuntimes;
@@ -36,7 +37,8 @@ public class Query {
     // initialize all the guys
     resultVerifier = new HashMap<String, Integer>();
     //plans = new HashMap<String, String>();
-    joinOrders = new HashMap<String, List<int[]>>();
+    //joinOrders = new HashMap<String, List<int[]>>();
+    joinOrders = new HashMap<String, MyUtils.JoinOrder>();
     costs = new HashMap<String, Double>();
     plans = new HashMap<String, String>();
     planningTimes = new HashMap<String, Long>();

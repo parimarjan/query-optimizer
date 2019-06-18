@@ -42,34 +42,76 @@ import java.nio.charset.StandardCharsets;
 
 public class MyUtils {
 
-  public static int countJoins(RelNode rootRel) {
-    /** Visitor that counts join nodes. */
-    class JoinCounter extends RelVisitor {
-      int joinCount;
+  public static class JoinOrder {
+    ArrayList<ArrayList<ArrayList<String>>> joinEdges = null;
+    String joinStr = "";
+    int joinCount = 0;
+    // represents each of the join edge choice made based on the QueryGraph
+    // representation used in each of the join-order search rules
+    List<int[]> joinEdgeChoices = null;
+  }
 
-      @Override public void visit(RelNode node, int ordinal, RelNode parent) {
-        System.out.println("ordinal: " + ordinal);
-        System.out.println("node: " + node);
-        System.out.println("parent: " + parent);
-        System.out.println(RelOptUtil.toString(node));
+  public static MyUtils.JoinOrder updateJoinOrder(RelNode rootRel, JoinOrder jo) {
+    /** Visitor that counts join nodes. */
+    class JoinOrderFinder extends RelVisitor {
+      ArrayList<ArrayList<ArrayList<String>>> joinEdges = new ArrayList<ArrayList<ArrayList<String>>>();
+      String joinStr = "";
+      int joinCount = 0;
+
+      private String getJoinOrder(RelNode node) {
+        String str = "";
         if (node instanceof Join) {
           ++joinCount;
           Join j = (Join) node;
-          RelNode left = j.getLeft();
-          RelNode right = j.getRight();
-          System.out.println("left: " + left);
-          System.out.println("right: " + right);
+          RelNode leftNode = j.getLeft();
+          RelNode rightNode = j.getRight();
+          ArrayList<String> leftTables = getAllTableNames(leftNode);
+          ArrayList<String> rightTables = getAllTableNames(rightNode);
+          ArrayList<String> curTables = getAllTableNames(node);
+          java.util.Collections.sort(leftTables);
+          java.util.Collections.sort(rightTables);
+          java.util.Collections.sort(curTables);
+          ArrayList<ArrayList<String>> edge1 = new ArrayList<ArrayList<String>>();
+          ArrayList<ArrayList<String>> edge2 = new ArrayList<ArrayList<String>>();
+          edge1.add(leftTables);
+          edge1.add(curTables);
+          edge2.add(rightTables);
+          edge2.add(curTables);
+          joinEdges.add(edge1);
+          joinEdges.add(edge2);
+          String left = getJoinOrder(leftNode);
+          String right = getJoinOrder(rightNode);
+          str = "JOIN (" + left + " , " + right + ")";
+          return str;
+        } else if (node instanceof Filter || node instanceof TableScan) {
+          str = getTableName(node);
+          return str;
         }
-        super.visit(node, ordinal, parent);
+        return null;
       }
 
-      int run(RelNode node) {
+      @Override public void visit(RelNode node, int ordinal, RelNode parent) {
+        if (node instanceof Join) {
+          joinStr = getJoinOrder(node);
+          return;
+        } else {
+          super.visit(node, ordinal, parent);
+        }
+      }
+
+      JoinOrder run(RelNode node, JoinOrder jo) {
         go(node);
-        return joinCount;
+        if (jo == null) {
+          jo = new JoinOrder();
+        }
+        jo.joinStr = joinStr;
+        jo.joinCount = joinCount;
+        jo.joinEdges = joinEdges;
+        return jo;
       }
     }
 
-    return new JoinCounter().run(rootRel);
+    return new JoinOrderFinder().run(rootRel, jo);
   }
 
   public static ArrayList<String> getAllTableNames(RelNode rel) {
@@ -78,13 +120,7 @@ public class MyUtils {
     }
     List<RelNode> inputs = rel.getInputs();
     ArrayList<String> tableNames = new ArrayList<String>();
-    //System.out.println("inputs.size = " + inputs.size());
-    //if (inputs.size() == 0) {
-      //System.out.println(rel);
-    //}
     if (inputs.size() <= 1) {
-      //String curTable = getTableName(inputs.get(0));
-      //System.out.println("rel: " + rel);
       String curTable = getTableName(rel);
       tableNames.add(curTable);
     } else {
@@ -345,59 +381,6 @@ public class MyUtils {
     }
 
     return execResult;
-  }
-
-  /* @node: node to deconstruct to sql
-   */
-  public static String relToSql(RelNode node)
-  {
-    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
-    ResultSet rs = null;
-    PreparedStatement ps = null;
-    CalciteConnection curConn = null;
-    String sqlString = "";
-
-    try {
-      curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
-      curConn.setAutoCommit(true);
-      RelRunner runner = curConn.unwrap(RelRunner.class);
-      ps = runner.prepare(node);
-      System.out.println("ps: " + ps);
-      ps.setQueryTimeout(1);
-      try {
-        rs = ps.executeQuery();
-      } catch (Exception e) {
-        // do nothing, since this would be triggered by the queryTimeOut.
-        e.printStackTrace();
-      }
-      String executedQuery = rs.getStatement().toString();
-      System.out.println("executedQuery: " + executedQuery);
-    } catch (Exception e) {
-      e.printStackTrace();
-
-      try {
-        curConn.close();
-        ps.close();
-      } catch (Exception e2) {
-        e2.printStackTrace();
-        System.exit(-1);
-      }
-      return null;
-    }
-    /* clean up the remaining used resources */
-
-    try {
-      //TimeUnit.SECONDS.sleep(2);
-      curConn.close();
-      ps.close();
-      if (rs != null) rs.close();
-    } catch (Exception e) {
-      e.printStackTrace();
-      // no good way to handle this (?)
-      System.exit(-1);
-    }
-
-    return sqlString;
   }
 
   public static ExecutionResult getResultSetHash(ResultSet res)

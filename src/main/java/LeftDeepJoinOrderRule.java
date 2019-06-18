@@ -184,14 +184,16 @@ public class LeftDeepJoinOrderRule extends RelOptRule
     ArrayList<Integer> bestEdges = memoizedBestJoins.get(allFactors);
 
     Query curQuery = QueryOptExperiment.getCurrentQuery();
-    curQuery.joinOrders.put("LEFT_DEEP", new ArrayList<int[]>());
+    curQuery.joinOrders.put("LEFT_DEEP", new MyUtils.JoinOrder());
+    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
 
     for (Integer edge : bestEdges) {
         // FIXME: update the joinOrders
         int[] factorIndices = qg.edges.get(edge).factors.toArray();
         qg.updateGraph(factorIndices);
-        curQuery.joinOrders.get("LEFT_DEEP").add(factorIndices);
+        joinOrder.add(factorIndices);
     }
+    curQuery.joinOrders.get("LEFT_DEEP").joinEdgeChoices = joinOrder;
     RelNode optNode = qg.getFinalOptimalRelNode();
     call.transformTo(optNode);
   }

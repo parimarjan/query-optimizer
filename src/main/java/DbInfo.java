@@ -23,12 +23,12 @@ public class DbInfo {
     DatabaseMetaData md = conn.getMetaData();
     String types[] = {"TABLE"};
     ResultSet tables = md.getTables(null, null, "%", types);
-    System.out.println("tables are: ");
+    //System.out.println("tables are: ");
     //int tableCount = 0;
     attrCount = 0;
     while (tables.next()) {
       String tableName = tables.getString(3);
-      System.out.println(tableName);
+      //System.out.println(tableName);
       tableFeaturesOffsetMap.put(tableName, attrCount);
       /* count all the attributes of this table */
       ResultSet attrs = md.getColumns(null, null, tableName, "%");

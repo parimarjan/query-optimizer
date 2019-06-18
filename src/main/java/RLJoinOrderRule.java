@@ -111,13 +111,15 @@ public class RLJoinOrderRule extends RelOptRule {
     zmq.episodeDone = 0;
     Query curQuery = QueryOptExperiment.getCurrentQuery();
     // replace whatever was there before
-    curQuery.joinOrders.put("RL", new ArrayList<int[]>());
+    //curQuery.joinOrders.put("RL", new ArrayList<int[]>());
+    curQuery.joinOrders.put("RL", new MyUtils.JoinOrder());
+    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
 
     for (;;) {
       // break condition
       final int[] factors = chooseNextEdge(queryGraph);
       if (factors == null) break;
-      curQuery.joinOrders.get("RL").add(factors);
+      joinOrder.add(factors);
       double cost = queryGraph.updateGraph(factors);
       if (queryGraph.edges.size() == 0) zmq.episodeDone = 1;
 
@@ -126,6 +128,7 @@ public class RLJoinOrderRule extends RelOptRule {
       zmq.lastReward = -cost;
       zmq.waitForClientTill("getReward");
     }
+    curQuery.joinOrders.get("RL").joinEdgeChoices = joinOrder;
 
     /// FIXME: need to understand what this TargetMapping business really is...
     /// just adding a projection on top of the left nodes we had.

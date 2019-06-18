@@ -314,13 +314,9 @@ public class QueryOptExperiment {
       }
       // FIXME: simplify this
       Query query = queries.get(nextQuery);
-      //System.out.println("nextQuery: " + nextQuery);
-      //System.out.println("query: " + query.sql);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
 
-      //System.out.println("training mode: " + params.train);
-      //System.out.println("nextQuery is: " + nextQuery);
       String sqlQuery = query.sql;
       currentQuery = query;
       zmq.sqlQuery = sqlQuery;
@@ -448,34 +444,21 @@ public class QueryOptExperiment {
       //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
 
       String optPlan = RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
-      System.out.println(optPlan);
-      int numJoins = MyUtils.countJoins(optimizedNode);
-      System.out.println("numJoins: " + numJoins);
-      System.exit(-1);
-			//MyRelToSqlConverter relToSqlConverter = new MyRelToSqlConverter(AnsiSqlDialect.DEFAULT);
-      //RelToSqlConverter.Result res = relToSqlConverter.visitChild(0, optimizedNode);
-      //final SqlNode sqlNode = relToSqlConverter.visitChild(0, optimizedNode).asStatement();
-
-			//SqlNode sqlNode = res.asQueryOrValues();
-			//String result = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT, false).getSql();
-			//System.out.println(result);
-
-			//Result sqlres = relSql.visit(rel);
-			//Result sqlres = relSql.result(rel);
-			//System.out.println(sqlRes);
       query.plans.put(plannerName, optPlan);
+      // slightly complicated because we need information from multiple places
+      // in the joinOrder struct
+      MyUtils.JoinOrder joinOrder = query.joinOrders.get(plannerName);
+      joinOrder = MyUtils.updateJoinOrder(optimizedNode, joinOrder);
+      query.joinOrders.put(plannerName, joinOrder);
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
-      //if (plannerName.equals("RL")) {
-	//return true;
-      //}
       if (params.execOnDB) {
-	if (!params.train) {
-	  execPlannerOnDB(query, plannerName, optimizedNode);
-	} else if (plannerName.equals("RL")) {
-	  execPlannerOnDB(query, plannerName, optimizedNode);
-	}
+        if (!params.train) {
+          execPlannerOnDB(query, plannerName, optimizedNode);
+        } else if (plannerName.equals("RL")) {
+          execPlannerOnDB(query, plannerName, optimizedNode);
+        }
       }
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..

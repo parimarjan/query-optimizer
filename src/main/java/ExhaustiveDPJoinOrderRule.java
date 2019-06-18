@@ -159,12 +159,15 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
             multiJoin.getNumJoinFactors())).bestJoins;
     QueryGraph finalQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
     Query curQuery = QueryOptExperiment.getCurrentQuery();
-    curQuery.joinOrders.put("EXHAUSTIVE", new ArrayList<int[]>());
+    //curQuery.joinOrders.put("EXHAUSTIVE", new ArrayList<int[]>());
+    curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
+    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
 
     for (ImmutableBitSet[] factors : optOrdering) {
       int[] factorIndices = finalQG.updateGraphBitset(factors);
-      curQuery.joinOrders.get("EXHAUSTIVE").add(factorIndices);
+      joinOrder.add(factorIndices);
     }
+    curQuery.joinOrders.get("EXHAUSTIVE").joinEdgeChoices = joinOrder;
     RelNode optNode = finalQG.getFinalOptimalRelNode();
     call.transformTo(optNode);
   }
