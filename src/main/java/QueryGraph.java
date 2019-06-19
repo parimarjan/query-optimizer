@@ -203,7 +203,7 @@ public class QueryGraph implements CsgCmpIterator {
   {
     final int id;
     protected final ImmutableBitSet factors;
-    final double cost;
+    public double cost;
     // one hot attributes mapping based on the DQ paper
     public ImmutableBitSet visibleAttrs;
 
@@ -401,14 +401,14 @@ public class QueryGraph implements CsgCmpIterator {
     }
 
 		// FIXME: these variables need to be renamed to estRowCount
-    double rowCount =
-        majorVertex.cost
-        * minorVertex.cost
-        * RelMdUtil.guessSelectivity(
-            RexUtil.composeConjunction(rexBuilder, conditions, false));
+    //double rowCount =
+        //majorVertex.cost
+        //* minorVertex.cost
+        //* RelMdUtil.guessSelectivity(
+            //RexUtil.composeConjunction(rexBuilder, conditions, false));
 
     final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
-        newFactors, rowCount, ImmutableList.copyOf(conditions), newFeatures);
+        newFactors, 0.00, ImmutableList.copyOf(conditions), newFeatures);
     allVertexes.add(newVertex);
     allVertexes.set(majorFactor, null);
     allVertexes.set(minorFactor, null);
@@ -437,6 +437,7 @@ public class QueryGraph implements CsgCmpIterator {
     Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(relNodes);
     RelNode curOptNode = curTop.left;
     double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
+    newVertex.cost = cost;
 		this.costSoFar += cost;
     return cost;
   }

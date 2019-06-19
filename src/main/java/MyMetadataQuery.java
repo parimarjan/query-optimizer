@@ -53,7 +53,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
   // in terms of number of rows. This is used for calculating the cost in a
   // non-linear model.
   private final double MEMORY_LIMIT = Math.pow(10, 6);
-  // TODO: support options: CM1, CM2, CM3, RowCount
+  // TODO: support options: CM2, rowCount, MM
   private final String COST_MODEL_NAME;
 
   // FIXME: temporary solution. make this general purpose.
@@ -161,59 +161,135 @@ public class MyMetadataQuery extends RelMetadataQuery {
     return rowCount;
   }
 
+  private RelOptCost getHashJoinCost(Join rel) {
+    RelOptCost curCost = new MyCost(0.0, 0.0, 0.0);
+    RelNode left = ((Join) rel).getLeft();
+    RelNode right = ((Join) rel).getRight();
+    //RelOptCost leftCost = getCumulativeCost(left);
+    //RelOptCost rightCost = getCumulativeCost(right);
+    //double leftRows = ((MyCost) leftCost).cost;
+    //double rightRows = ((MyCost) rightCost).cost;
+    double leftRows = getRowCount(left);
+    double rightRows = getRowCount(right);
+    //((MyCost) curCost).cost = leftRows + rightRows;
+    double curRows = getRowCount(rel);
+    ((MyCost) curCost).cost = leftRows + rightRows + curRows;
+    return curCost;
+  }
+
+  private RelOptCost getIndexNestedLoopJoinCost(Join rel) {
+    // Need to ensure right is a base relation, and has an index built on it.
+    MyCost curCost = new MyCost(0.0, 0.0, 0.0);
+    RelNode right = rel.getRight();
+    RelNode left = rel.getLeft();
+    //RelOptCost leftCost = getCumulativeCost(left);
+    //double leftRows = ((MyCost )leftCost).cost;
+    double leftRows = getRowCount(left);
+    curCost.cost = 2.00*leftRows;
+    return curCost;
+  }
+
 	@Override
   public RelOptCost getCumulativeCost(RelNode rel) {
-    if (COST_MODEL_NAME.equals("rowCount")) {
-      // FIXME: is this actually just rowCount w/o any modifications?
-      RelOptCost origCost = super.getCumulativeCost(rel);
-      return origCost;
-    }
+    //System.out.println("getCumulativeCost!");
+    //System.out.println(RelOptUtil.toString(rel));
+    return super.getCumulativeCost(rel);
+    //if (COST_MODEL_NAME.equals("rowCount")) {
+      //// FIXME: is this actually just rowCount w/o any modifications?
+      //RelOptCost origCost = super.getCumulativeCost(rel);
+      //return origCost;
+    //}
+    //else if (COST_MODEL_NAME.equals("MM")) {
+      ////System.out.println(RelOptUtil.toString(rel));
+      //// temporary, will just modify origCost
+      //RelOptCost curCost = super.getCumulativeCost(rel);
+      //if (rel instanceof Join) {
+        //// Calculate both the hash-join and the index nested-loop join cost,
+        //// and return the smaller of the two.
+        //RelOptCost hashJoinCost = getHashJoinCost((Join) rel);
+        //RelOptCost indexLoopCost = getIndexNestedLoopJoinCost((Join) rel);
+        //if (indexLoopCost.isLt(hashJoinCost)) {
+          //return indexLoopCost;
+        //} else {
+          //return hashJoinCost;
+        //}
+      //} else if (rel instanceof Filter || rel instanceof TableScan) {
+        //double rows = getRowCount(rel);
+        //((MyCost) curCost).cost = 0.2*rows;
+        //return curCost;
+      //} else {
+        //return curCost;
+      //}
+    //}
 
-    if (rel instanceof Join) {
-      RelNode left = ((Join) rel).getLeft();
-      RelNode right = ((Join) rel).getRight();
-      RelOptCost leftCost = getCumulativeCost(left);
-      RelOptCost rightCost = getCumulativeCost(right);
-      RelOptCost curCost = getNonCumulativeCost(rel);
+    //if (rel instanceof Join) {
+      //RelNode left = ((Join) rel).getLeft();
+      //RelNode right = ((Join) rel).getRight();
+      //RelOptCost leftCost = getCumulativeCost(left);
+      //RelOptCost rightCost = getCumulativeCost(right);
+      //RelOptCost curCost = getNonCumulativeCost(rel);
+      ////return leftCost.plus(rightCost).plus(curCost);
 
-      if (COST_MODEL_NAME.equals("CM2")) {
-        return leftCost.plus(rightCost).plus(curCost);
-      } else {
-        // FIXME:
-        System.err.println("unsupported cost model " + COST_MODEL_NAME);
-        System.exit(-1);
-      }
-    }
-    // else just treat it as usual
-    RelOptCost origCost = super.getCumulativeCost(rel);
-    return origCost;
+      //if (COST_MODEL_NAME.equals("CM2")) {
+        //return leftCost.plus(rightCost).plus(curCost);
+      //} else {
+        //// FIXME:
+        //System.err.println("unsupported cost model " + COST_MODEL_NAME);
+        //System.exit(-1);
+      //}
+    //}
+    //// else just treat it as usual
+    //RelOptCost origCost = super.getCumulativeCost(rel);
+    //return origCost;
   }
 
 	@Override
   public RelOptCost getNonCumulativeCost(RelNode rel) {
-    RelOptCost orig_cost = super.getNonCumulativeCost(rel);
-    if (rel instanceof Join && !COST_MODEL_NAME.equals("rowCount")) {
+    RelOptCost origCost = super.getNonCumulativeCost(rel);
+    if (COST_MODEL_NAME.equals("MM")) {
+      RelOptCost curCost = new MyCost(0.0, 0.0, 0.0);
+      if (rel instanceof Join) {
+        RelOptCost hashJoinCost = getHashJoinCost((Join) rel);
+        ArrayList<String> rightTables = MyUtils.getAllTableNames(((Join)rel).getRight());
+        if (rightTables.size() > 1) {
+          return hashJoinCost;
+        }
+
+        RelOptCost indexLoopCost = getIndexNestedLoopJoinCost((Join) rel);
+        if (indexLoopCost.isLt(hashJoinCost)) {
+          //System.out.println("choosing loop join!");
+          return indexLoopCost;
+        } else {
+          return hashJoinCost;
+        }
+      } else if (rel instanceof Filter || rel instanceof TableScan) {
+        double rows = getRowCount(rel);
+        ((MyCost) curCost).cost = 0.2*rows;
+        return curCost;
+      } else {
+        // just return 0 cost for the rest.
+        return curCost;
+      }
+    } else if (rel instanceof Join && COST_MODEL_NAME.equals("CM2")) {
       RelNode left = ((Join) rel).getLeft();
       RelNode right = ((Join) rel).getRight();
       double leftRows = getRowCount(left);
       double rightRows = getRowCount(right);
       double curRows = getRowCount(rel);
-      if (COST_MODEL_NAME.equals("CM2")) {
-        // Now, the cost model will consider whether the leftRows and rightRows
-        // fit in the memory or not.
-        if ((leftRows + rightRows) < MEMORY_LIMIT) {
-          return orig_cost;
-        } else if (Math.min(leftRows, rightRows) < MEMORY_LIMIT) {
-          //System.out.println("!!!case 2!!!");
-          double newCost = 2*(leftRows + rightRows) + curRows;
-          ((MyCost) orig_cost).cost = newCost;
-        } else {
-          double newCost = rightRows + Math.ceil(rightRows / MEMORY_LIMIT) * leftRows + curRows;
-          ((MyCost) orig_cost).cost = newCost;
-        }
+      // Now, the cost model will consider whether the leftRows and rightRows
+      // fit in the memory or not.
+      if ((leftRows + rightRows) < MEMORY_LIMIT) {
+        return origCost;
+      } else if (Math.min(leftRows, rightRows) < MEMORY_LIMIT) {
+        //System.out.println("!!!case 2!!!");
+        double newCost = 2*(leftRows + rightRows) + curRows;
+        ((MyCost) origCost).cost = newCost;
+      } else {
+        double newCost = rightRows + Math.ceil(rightRows / MEMORY_LIMIT) * leftRows + curRows;
+        ((MyCost) origCost).cost = newCost;
       }
     }
-    return orig_cost;
+    return origCost;
   }
 
   public void saveUpdatedCardinalities() {

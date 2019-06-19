@@ -439,6 +439,8 @@ public class QueryOptExperiment {
       if (verbose) System.out.println("planning time: " +
           planningTime);
       RelOptCost optCost = computeCost(mq, optimizedNode);
+      // Time to update the query with the current results
+      query.costs.put(plannerName, ((MyCost) optCost).getCost());
       if (verbose) System.out.println("optimized cost for " + plannerName
           + " is: " + optCost);
       //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
@@ -450,8 +452,6 @@ public class QueryOptExperiment {
       MyUtils.JoinOrder joinOrder = query.joinOrders.get(plannerName);
       joinOrder = MyUtils.updateJoinOrder(optimizedNode, joinOrder);
       query.joinOrders.put(plannerName, joinOrder);
-      // Time to update the query with the current results
-      query.costs.put(plannerName, ((MyCost) optCost).getCost());
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
         if (!params.train) {
