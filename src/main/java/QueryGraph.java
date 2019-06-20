@@ -58,6 +58,7 @@ public class QueryGraph implements CsgCmpIterator {
   // vertices
   public ArrayList<Edge> edges;
 	// Cumulative cost of the joins we have done so far in the QueryGraph.
+  public Double lastCost;
 	public Double costSoFar;
   // Used to get the RelNode corresponding to the Joins we have done so far.
   // These RelNodes are required to run our custom cost models using the
@@ -437,7 +438,10 @@ public class QueryGraph implements CsgCmpIterator {
     Pair<RelNode, Mappings.TargetMapping> curTop = Util.last(relNodes);
     RelNode curOptNode = curTop.left;
     double cost = ((MyCost) mq.getNonCumulativeCost(curOptNode)).getCost();
+    // important to set this because we use these values to choose left side of
+    // the join.
     newVertex.cost = cost;
+    this.lastCost = cost;
 		this.costSoFar += cost;
     return cost;
   }
@@ -519,6 +523,15 @@ public class QueryGraph implements CsgCmpIterator {
     if (pw != null) {
       pw.println(Util.last(relNodes));
     }
+  }
+
+  public ArrayList<String> getLastNodeTables()
+  {
+    Pair<RelNode, Mappings.TargetMapping> top = Util.last(this.relNodes);
+    RelNode node = top.left;
+    ArrayList<String> curTables = MyUtils.getAllTableNames(node);
+    java.util.Collections.sort(curTables);
+    return curTables;
   }
 
   public Edge createEdge(RexNode condition)

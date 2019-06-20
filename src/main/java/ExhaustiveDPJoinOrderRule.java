@@ -154,20 +154,26 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     // Not checking for null here, as we MUST have this in memoizedBestJoins,
     // or else something is wrong with the algorithm and it might as well
     // crash.
+    Query curQuery = QueryOptExperiment.getCurrentQuery();
+    curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
+    HashMap<ArrayList<String>, Double> optCosts =
+              new HashMap<ArrayList<String>, Double>();
+    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
+
     ArrayList<ImmutableBitSet[]> optOrdering =
       memoizedBestJoins.get(ImmutableBitSet.range(0,
             multiJoin.getNumJoinFactors())).bestJoins;
+
     QueryGraph finalQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-    Query curQuery = QueryOptExperiment.getCurrentQuery();
-    //curQuery.joinOrders.put("EXHAUSTIVE", new ArrayList<int[]>());
-    curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
-    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
 
     for (ImmutableBitSet[] factors : optOrdering) {
       int[] factorIndices = finalQG.updateGraphBitset(factors);
       joinOrder.add(factorIndices);
+      optCosts.put(finalQG.getLastNodeTables(), finalQG.lastCost);
     }
     curQuery.joinOrders.get("EXHAUSTIVE").joinEdgeChoices = joinOrder;
+    curQuery.joinOrders.get("EXHAUSTIVE").joinCosts = optCosts;
+
     RelNode optNode = finalQG.getFinalOptimalRelNode();
     call.transformTo(optNode);
   }

@@ -49,6 +49,9 @@ public class MyUtils {
     // represents each of the join edge choice made based on the QueryGraph
     // representation used in each of the join-order search rules
     List<int[]> joinEdgeChoices = null;
+    //List<Double> joinCosts = null;
+    HashMap<ArrayList<String>, Double> joinCosts  = null;
+    HashMap<ArrayList<String>, Double> joinCards  = null;
   }
 
   public static MyUtils.JoinOrder updateJoinOrder(RelNode rootRel, JoinOrder jo) {

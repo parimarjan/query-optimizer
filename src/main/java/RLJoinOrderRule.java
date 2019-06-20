@@ -36,11 +36,12 @@ import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mappings;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
+//import java.util.ArrayList;
+//import java.util.Comparator;
+//import java.util.Iterator;
+//import java.util.List;
+//import java.util.Objects;
+import java.util.*;
 import static org.apache.calcite.util.mapping.Mappings.TargetMapping;
 
 // new ones
@@ -114,6 +115,7 @@ public class RLJoinOrderRule extends RelOptRule {
     //curQuery.joinOrders.put("RL", new ArrayList<int[]>());
     curQuery.joinOrders.put("RL", new MyUtils.JoinOrder());
     ArrayList<int[]> joinOrder = new ArrayList<int[]>();
+    HashMap<ArrayList<String>, Double> joinCosts = new HashMap<ArrayList<String>, Double>();
 
     for (;;) {
       // break condition
@@ -125,14 +127,16 @@ public class RLJoinOrderRule extends RelOptRule {
 
       // FIXME: onlyFinalReward is pretty hacky right now...
       costSoFar += cost;    // only required for onlyFinalReward
+      joinCosts.put(queryGraph.getLastNodeTables(), cost);
       zmq.lastReward = -cost;
       zmq.waitForClientTill("getReward");
     }
     curQuery.joinOrders.get("RL").joinEdgeChoices = joinOrder;
+    curQuery.joinOrders.get("RL").joinCosts = joinCosts;
 
     /// FIXME: need to understand what this TargetMapping business really is...
     /// just adding a projection on top of the left nodes we had.
-    final Pair<RelNode, Mappings.TargetMapping> top = Util.last(queryGraph.relNodes);
+    Pair<RelNode, Mappings.TargetMapping> top = Util.last(queryGraph.relNodes);
     relBuilder.push(top.left)
         .project(relBuilder.fields(top.right));
     RelNode optNode = relBuilder.build();
