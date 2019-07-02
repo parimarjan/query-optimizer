@@ -112,11 +112,11 @@ public class MyMetadataQuery extends RelMetadataQuery {
             rowCount = rowCountLong.doubleValue();
             return rowCount;
           }
-          System.out.println("row count was null!");
+          //System.out.println("row count was null!");
           System.out.println("fileName: " + query.queryName);
           System.out.println("tableKey: " + tableKey);
-          return 10000000.00;
-          //System.exit(-1);
+          //return 10000000.00;
+          System.exit(-1);
         }
       } else {
         // these seem to happen mostly for aggregate nodes etc.

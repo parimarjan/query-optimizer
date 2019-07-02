@@ -9,8 +9,8 @@ version: '1.0',
       operand: {
         jdbcDriver: 'org.postgresql.Driver',
         jdbcUrl: 'jdbc:postgresql://localhost:5432/imdb',
-        jdbcUser: 'imdb',
-        jdbcPassword: 'imdb'
+        jdbcUser: 'ubuntu',
+        jdbcPassword: 'ubuntu'
       }
     }
   ]
