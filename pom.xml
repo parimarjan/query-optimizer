@@ -29,7 +29,8 @@
 				<dependency>
 					<groupId>org.zeromq</groupId>
 					<artifactId>jeromq</artifactId>
-					<version>0.4.3</version>
+					<!--<version>0.4.3</version>-->
+          <version> LATEST </version>
 				</dependency>
 
         <dependency>

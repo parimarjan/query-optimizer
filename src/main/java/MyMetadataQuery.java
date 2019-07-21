@@ -196,25 +196,25 @@ public class MyMetadataQuery extends RelMetadataQuery {
 	@Override
   public RelOptCost getNonCumulativeCost(RelNode rel) {
     RelOptCost origCost = super.getNonCumulativeCost(rel);
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (COST_MODEL_NAME.equals("MM")) {
       RelOptCost curCost = new MyCost(0.0, 0.0, 0.0);
       if (rel instanceof Join) {
         RelOptCost hashJoinCost = getHashJoinCost((Join) rel);
         ArrayList<String> rightTables = MyUtils.getAllTableNames(((Join)rel).getRight());
-        if (rightTables.size() > 1) {
+        if (rightTables.size() > 1 || !params.useIndexNestedLJ) {
           return hashJoinCost;
         }
 
         RelOptCost indexLoopCost = getIndexNestedLoopJoinCost((Join) rel);
         if (indexLoopCost.isLt(hashJoinCost)) {
-          //System.out.println("choosing loop join!");
           return indexLoopCost;
         } else {
           return hashJoinCost;
         }
       } else if (rel instanceof Filter || rel instanceof TableScan) {
         double rows = getRowCount(rel);
-        ((MyCost) curCost).cost = 0.0*rows;
+        ((MyCost) curCost).cost = params.baseTableReadCostFactor * rows;
         return curCost;
       } else {
         // just return 0 cost for the rest.

@@ -235,7 +235,7 @@ public class ZeroMQServer {
         return msg;
     }
 
-    if (verbose) System.out.println("resp is: " + resp);
+    //if (verbose) System.out.println("resp is: " + resp);
 		try {
       responder.send(resp.toString());
 		} catch (Exception ex) {

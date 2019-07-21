@@ -144,6 +144,8 @@ public class QueryOptExperiment {
     public String runtimeFileName = "allQueryRuntimes.json";
     // cardinalities dictionary.
     public HashMap<String, HashMap<String, Long>> cardinalities = null;
+    public boolean useIndexNestedLJ;
+    public Double baseTableReadCostFactor;
 
     public Params() {
 
@@ -288,16 +290,16 @@ public class QueryOptExperiment {
         zmq.waitForClientTill("setTrainQueries");
       }
 
-      if (testQueries == null) {
-        zmq.waitForClientTill("setTestQueries");
-      }
+      //if (testQueries == null) {
+        //zmq.waitForClientTill("setTestQueries");
+      //}
 
+      if (verbose) System.out.println("total queries: " + trainQueries.size());
       // at this point, all the other planners would have executed on the
       // current query as well, so all the stats about it would be updated in
       // the Query struct.
       if (params.python) zmq.waitForClientTill("getQueryInfo");
       if (params.python) zmq.waitForClientTill("reset");
-
       if (params.train) {
         alreadyTesting = false;
         queries = trainQueries;
