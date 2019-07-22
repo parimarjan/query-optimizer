@@ -328,8 +328,6 @@ public class QueryOptExperiment {
         break;
       }
       zmq.reset = false;
-      System.out.println("next query: " + query.queryName);
-      System.out.println(query.sql);
 
       for (int i = 0; i < volcanoPlanners.size(); i++) {
         try {
