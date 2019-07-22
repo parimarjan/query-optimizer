@@ -214,7 +214,7 @@ public class MyMetadataQuery extends RelMetadataQuery {
         }
       } else if (rel instanceof Filter || rel instanceof TableScan) {
         double rows = getRowCount(rel);
-        ((MyCost) curCost).cost = params.baseTableReadCostFactor * rows;
+        ((MyCost) curCost).cost = params.scanCostFactor * rows;
         return curCost;
       } else {
         // just return 0 cost for the rest.

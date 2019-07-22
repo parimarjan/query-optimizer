@@ -252,6 +252,8 @@ public class MyUtils {
         rs = ps.executeQuery();
       } catch (Exception e) {
         // do nothing, since this would be triggered by the queryTimeOut.
+        System.out.println(e);
+        e.printStackTrace();
         System.out.println("queryTimeout!");
         runtime = (long) params.maxExecutionTime * 1000;
       }
@@ -323,6 +325,8 @@ public class MyUtils {
         rs = ps.executeQuery();
       } catch (Exception e) {
         // do nothing, since this would be triggered by the queryTimeOut.
+        System.out.println(e);
+        e.printStackTrace();
         System.out.println("queryTimeout!");
         runtime = (long) params.maxExecutionTime * 1000;
       }

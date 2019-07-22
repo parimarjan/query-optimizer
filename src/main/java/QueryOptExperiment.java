@@ -129,9 +129,9 @@ public class QueryOptExperiment {
     public boolean python = true;
     public String dbUrl = "";
     // FIXME: make this command line arg
-    public String pgUrl = "jdbc:postgresql://localhost:5400/imdb";
-    public String user = "imdb";
-    public String pwd = "imdb";
+    public String pgUrl = "jdbc:postgresql://localhost:5432/imdb";
+    public String user = "ubuntu";
+    public String pwd = "ubuntu";
     // clear cache after every execution
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
@@ -145,7 +145,7 @@ public class QueryOptExperiment {
     // cardinalities dictionary.
     public HashMap<String, HashMap<String, Long>> cardinalities = null;
     public boolean useIndexNestedLJ;
-    public Double baseTableReadCostFactor;
+    public Double scanCostFactor;
 
     public Params() {
 
@@ -359,8 +359,6 @@ public class QueryOptExperiment {
 
   private void execPlannerOnDB(Query query, String plannerName, RelNode node)
   {
-    // run unoptimized sql query. This should use postgres' usual
-    // optimizations.
     ArrayList<Long> savedRTs = query.dbmsAllRuntimes.get(plannerName);
     if (savedRTs == null) {
       savedRTs = new ArrayList<Long>();
@@ -372,8 +370,7 @@ public class QueryOptExperiment {
       return;
     }
     MyUtils.ExecutionResult result = null;
-    // run it one extra time
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 1; i++) {
       if (plannerName.equals("postgres")) {
         // run N times, and store the average
         result = MyUtils.executeSql(query.sql, false,
@@ -385,8 +382,6 @@ public class QueryOptExperiment {
       savedRTs.add(result.runtime);
     }
     query.dbmsAllRuntimes.put(plannerName, savedRTs);
-    query.dbmsRuntimes.put(plannerName, result.runtime);
-    query.saveDBMSRuntimes();
   }
 
   private boolean planAndExecuteQuery(Query query, int plannerNum)
@@ -458,19 +453,16 @@ public class QueryOptExperiment {
       query.joinOrders.put(plannerName, joinOrder);
       query.planningTimes.put(plannerName, planningTime);
       if (params.execOnDB) {
-        if (!params.train) {
-          execPlannerOnDB(query, plannerName, optimizedNode);
-        } else if (plannerName.equals("RL")) {
-          execPlannerOnDB(query, plannerName, optimizedNode);
-        }
+        execPlannerOnDB(query, plannerName, optimizedNode);
       }
     } catch (Exception e) {
       // it is useful to throw the error here to see what went wrong..
-      throw e;
+        throw e;
     }
 
     // FIXME: to execute on postgres, just execute plain sql
-    if (params.execOnDB && !params.train) {
+    //if (params.execOnDB && !params.train) {
+    if (params.execOnDB) {
       execPlannerOnDB(query, "postgres", node);
     }
     return true;

@@ -12,7 +12,7 @@ do
   echo $query
   ./drop_cache.sh
   echo "run $i"
-  sleep 3
+  #sleep 3
   START_TIME=$SECONDS
   psql -d imdb < $query
   ELAPSED_TIME=$(($SECONDS - $START_TIME))

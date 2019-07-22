@@ -32,7 +32,7 @@ class Main {
     options.addOption(newOption("execOnDB", "base final reward on runtime"));
     options.addOption(newOption("costModel", "which cost model to use. '', 'CM1', 'CM2', 'CM3'"));
     options.addOption(newOption("dataset", "which dataset to use"));
-    options.addOption(newOption("baseTableReadCostFactor", "Between 0,1; Used to denote how much cheaper reading base tables are"));
+    options.addOption(newOption("scanCostFactor", "Between 0,1; Used to denote how much cheaper reading base tables are"));
     options.addOption(newOption("useIndexNestedLJ", "in the cost model, use index nested loop joins or not"));
 
     CommandLineParser parser = new DefaultParser();
@@ -56,7 +56,7 @@ class Main {
     Integer port = Integer.parseInt(cmd.getOptionValue("port", "5555"));
     Integer numExecutionReps = Integer.parseInt(cmd.getOptionValue("numExecutionReps", "1"));
     Integer maxExecutionTime = Integer.parseInt(cmd.getOptionValue("maxExecutionTime", "1200"));
-    Double baseTableReadCostFactor = Double.parseDouble(cmd.getOptionValue("baseTableReadCostFactor", "0.0"));
+    Double scanCostFactor = Double.parseDouble(cmd.getOptionValue("scanCostFactor", "0.0"));
 
     /// FIXME: handle booleans correctly
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);
@@ -121,7 +121,7 @@ class Main {
     params.numExecutionReps = numExecutionReps;
     params.maxExecutionTime = maxExecutionTime;
     params.useIndexNestedLJ = useIndexNestedLJ;
-    params.baseTableReadCostFactor = baseTableReadCostFactor;
+    params.scanCostFactor = scanCostFactor;
 
     try {
         exp = new QueryOptExperiment(dbUrl, plannerTypes, port, verbose, costModel, params);
