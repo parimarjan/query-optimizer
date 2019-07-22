@@ -323,8 +323,26 @@ public class MyUtils {
 
       try {
         rs = ps.executeQuery();
-      } catch (Exception e) {
+      } catch (SQLException e) {
         // do nothing, since this would be triggered by the queryTimeOut.
+        String error = e.toString();
+        int sqlStart = error.indexOf("[") + 1;
+        int sqlEnd = error.lastIndexOf("]");
+
+        String sql = error.substring(sqlStart, sqlEnd);
+        // cleanup. TODO: decompose this.
+        try {
+          curConn.close();
+          ps.close();
+        } catch (Exception e2) {
+          e2.printStackTrace();
+          System.exit(-1);
+        }
+        execResult = executeSql(sql, false, false);
+        System.out.println(sql);
+        return execResult;
+      } catch (Exception e) {
+        // FIXME: specify the right error and exit on unknown error
         System.out.println(e);
         e.printStackTrace();
         System.out.println("queryTimeout!");
@@ -335,35 +353,18 @@ public class MyUtils {
           long end = System.currentTimeMillis();
           runtime = end - start;
       }
-        // this can be an expensive operation, so only do it if really needed.
-        if (params.verifyResults || getTrueCardinality) {
-            execResult = getResultSetHash(rs);
-            execResult.runtime = runtime;
-        } else {
-            // default values
-            execResult = new ExecutionResult();
-            execResult.runtime = runtime;
-        }
+
+      // this can be an expensive operation, so only do it if really needed.
+      if (params.verifyResults || getTrueCardinality) {
+          execResult = getResultSetHash(rs);
+          execResult.runtime = runtime;
+      } else {
+          // default values
+          execResult = new ExecutionResult();
+          execResult.runtime = runtime;
+      }
     } catch (Exception e) {
       System.out.println("caught exception while executing query");
-      StringWriter errors = new StringWriter();
-      e.printStackTrace(new PrintWriter(errors));
-      String errorMsg = errors.toString();
-      // this error usually seems to happen in the execution attempt right
-      // after clearing cache
-      if (errorMsg.contains("administrator")) {
-        System.out.println("contains: admin");
-      }
-      // this seems to happen when Avatica decides to mysteriously send a
-      // cancelling by user request to psql (hypothesis: because it is taking
-      // too long...)
-      if (errorMsg.contains("user")) {
-        System.out.println("contains: user");
-      }
-
-      if (!errorMsg.contains("user") && !errorMsg.contains("administrator")) {
-        e.printStackTrace();
-      }
 
       try {
         curConn.close();
