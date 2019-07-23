@@ -99,11 +99,11 @@ class Main {
     if (lopt) {
       plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LOpt);
     }
-    if (python) {
-      plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RL);
-    }
     if (leftDeep) {
       plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.LEFT_DEEP);
+    }
+    if (python) {
+      plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.RL);
     }
 
     //plannerTypes.add(QueryOptExperiment.PLANNER_TYPE.BUSHY);

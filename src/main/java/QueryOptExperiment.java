@@ -130,8 +130,11 @@ public class QueryOptExperiment {
     public String dbUrl = "";
     // FIXME: make this command line arg
     public String pgUrl = "jdbc:postgresql://localhost:5432/imdb";
-    public String user = "ubuntu";
-    public String pwd = "ubuntu";
+    //public String user = "ubuntu";
+    //public String pwd = "ubuntu";
+    public String user = "pari";
+    public String pwd = "";
+
     // clear cache after every execution
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
@@ -368,7 +371,7 @@ public class QueryOptExperiment {
       return;
     }
     MyUtils.ExecutionResult result = null;
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 2; i++) {
       if (plannerName.equals("postgres")) {
         // run N times, and store the average
         result = MyUtils.executeSql(query.sql, false,
@@ -378,6 +381,7 @@ public class QueryOptExperiment {
       }
       System.out.println(plannerName + " took " + result.runtime + "ms" + " for " + query.queryName);
       savedRTs.add(result.runtime);
+      query.executedSqls.put(plannerName, result.executedSql);
     }
     query.dbmsAllRuntimes.put(plannerName, savedRTs);
   }
@@ -459,8 +463,7 @@ public class QueryOptExperiment {
     }
 
     // FIXME: to execute on postgres, just execute plain sql
-    //if (params.execOnDB && !params.train) {
-    if (params.execOnDB) {
+    if (params.execOnDB && !params.train) {
       execPlannerOnDB(query, "postgres", node);
     }
     return true;

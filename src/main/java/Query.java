@@ -20,6 +20,7 @@ public class Query {
   public HashMap<String, String> plans;
   public HashMap<String, Integer> resultVerifier;
   public HashMap<String, MyUtils.JoinOrder> joinOrders;
+  public HashMap<String, String> executedSqls;
 
   String allDBMSRuntimesFile = QueryOptExperiment.getParams().runtimeFileName;
   HashMap<String, ArrayList<Long>> dbmsAllRuntimes;
@@ -39,6 +40,7 @@ public class Query {
     joinOrders = new HashMap<String, MyUtils.JoinOrder>();
     costs = new HashMap<String, Double>();
     plans = new HashMap<String, String>();
+    executedSqls = new HashMap<String, String>();
     planningTimes = new HashMap<String, Long>();
     dbmsAllRuntimes = new HashMap<String, ArrayList<Long>>();
   }

@@ -194,6 +194,7 @@ public class MyUtils {
     public Integer resultHashCode = -1;
     public Long runtime = 0L;
     public Double trueCardinality = -1.00;
+    public String executedSql = "";
   }
 
   private static void clearCache()
@@ -234,22 +235,44 @@ public class MyUtils {
 		ExecutionResult execResult = null;
     ResultSet rs = null;
 		Connection con = null;
-    PreparedStatement ps = null;
+    //PreparedStatement ps = null;
+    Statement stmt = null;
 
     if (clearCache) {
         clearCache();
     }
+
     try {
       Class.forName("org.postgresql.Driver");
       con = DriverManager.getConnection(params.pgUrl, params.user,
                                           params.pwd);
-			//Statement stmt = con.createStatement();
-      ps = con.prepareStatement(sql);
-      ps.setQueryTimeout(params.maxExecutionTime);
+    } catch (Exception e) {
+      System.out.println("postgres connection failed");
+      try {
+        TimeUnit.SECONDS.sleep(10);
+        con = DriverManager.getConnection(params.pgUrl, params.user,
+                                            params.pwd);
+      } catch (Exception e2) {
+        System.out.println(e2);
+        e2.printStackTrace();
+        System.exit(-1);
+      }
+    }
+
+    try {
+      //ps = con.prepareStatement(sql);
+      //ps.setQueryTimeout(params.maxExecutionTime);
+      stmt = con.createStatement();
+      //String query = "select name, country, password from Users where email = '"+id+"' and password='"+pwd+"'";
+      //System.out.println(query);
+      //rs = stmt.executeQuery(query);
+
+
       long start = System.currentTimeMillis();
       Long runtime = null;
       try {
-        rs = ps.executeQuery();
+        //rs = ps.executeQuery();
+        rs = stmt.executeQuery(sql);
       } catch (Exception e) {
         // do nothing, since this would be triggered by the queryTimeOut.
         System.out.println(e);
@@ -262,15 +285,10 @@ public class MyUtils {
           long end = System.currentTimeMillis();
           runtime = end - start;
       }
-        // this can be an expensive operation, so only do it if really needed.
-      if ((params.verifyResults || getTrueCardinality) && rs != null) {
-          execResult = getResultSetHash(rs);
-          execResult.runtime = runtime;
-      } else {
-          // default values
-          execResult = new ExecutionResult();
-          execResult.runtime = runtime;
-      }
+      // default values
+      execResult = new ExecutionResult();
+      execResult.runtime = runtime;
+      execResult.executedSql = sql;
 
     } catch (Exception e) {
       // TODO: this seems to fail sometimes if postgres hasn't started yet.
@@ -281,7 +299,7 @@ public class MyUtils {
 
     try {
       con.close();
-      ps.close();
+      //ps.close();
       if (rs != null) rs.close();
     } catch (Exception e) {
       e.printStackTrace();
@@ -314,7 +332,20 @@ public class MyUtils {
 
     try {
       curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
-      curConn.setAutoCommit(true);
+    } catch (Exception e) {
+      System.out.println("postgres connection failed");
+      try {
+        TimeUnit.SECONDS.sleep(4);
+        curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
+      } catch (Exception e2) {
+        System.out.println(e);
+        e.printStackTrace();
+        System.exit(-1);
+      }
+    }
+
+    try {
+
       RelRunner runner = curConn.unwrap(RelRunner.class);
       ps = runner.prepare(node);
       ps.setQueryTimeout(params.maxExecutionTime);
@@ -338,8 +369,8 @@ public class MyUtils {
           e2.printStackTrace();
           System.exit(-1);
         }
+        System.out.println("going to use executeSql from executeNode");
         execResult = executeSql(sql, false, false);
-        System.out.println(sql);
         return execResult;
       } catch (Exception e) {
         // FIXME: specify the right error and exit on unknown error
