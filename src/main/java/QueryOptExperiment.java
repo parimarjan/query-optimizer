@@ -322,6 +322,7 @@ public class QueryOptExperiment {
       Query query = queries.get(nextQuery);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
+      System.out.println(query.sql);
 
       String sqlQuery = query.sql;
       currentQuery = query;
@@ -382,7 +383,6 @@ public class QueryOptExperiment {
       }
       System.out.println(plannerName + " took " + result.runtime + "ms" + " for " + query.queryName);
       savedRTs.add(result.runtime);
-      query.executedSqls.put(plannerName, result.executedSql);
     }
     query.dbmsAllRuntimes.put(plannerName, savedRTs);
   }
@@ -417,18 +417,13 @@ public class QueryOptExperiment {
     } catch (Exception e) {
       System.out.println(e);
       System.out.println("failed in getting Relnode from  " + query.sql);
-      return false;
-      //System.exit(-1);
+      System.exit(-1);
     }
 
     DbInfo.setCurrentQueryVisibleFeatures(node);
     // very important to do the replace EnumerableConvention thing for
     // mysterious reasons
     RelTraitSet traitSet = planner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
-    // experimental:
-    //RelTraitSet traitSet = planner.getEmptyTraitSet().replace(Convention.NONE);
-    //RelTraitSet traitSet = null;
-    //RelTraitSet traitSet = planner.getEmptyTraitSet();
 
     try {
       // using the default volcano planner.
@@ -445,7 +440,6 @@ public class QueryOptExperiment {
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
       if (verbose) System.out.println("optimized cost for " + plannerName
           + " is: " + optCost);
-      //System.out.println("optimized cost for " + plannerName + " is: " + optCost);
 
       String optPlan = RelOptUtil.dumpPlan("", optimizedNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
       query.plans.put(plannerName, optPlan);
@@ -455,6 +449,11 @@ public class QueryOptExperiment {
       joinOrder = MyUtils.updateJoinOrder(optimizedNode, joinOrder);
       query.joinOrders.put(plannerName, joinOrder);
       query.planningTimes.put(plannerName, planningTime);
+
+      String sqlToExecute = MyUtils.getSqlToExecute(optimizedNode);
+      //System.out.println(sqlToExecute);
+      query.executedSqls.put(plannerName, sqlToExecute);
+
       if (params.execOnDB) {
         execPlannerOnDB(query, plannerName, optimizedNode);
       }

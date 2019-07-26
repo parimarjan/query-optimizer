@@ -354,6 +354,7 @@ public class MyUtils {
 
       try {
         rs = ps.executeQuery();
+        System.out.println("SHOULD NOT HAPPEN IN executeNode");
       } catch (SQLException e) {
         // do nothing, since this would be triggered by the queryTimeOut.
         String error = e.toString();
@@ -444,5 +445,54 @@ public class MyUtils {
     execResult.resultHashCode = combinedResults.hashCode();
     execResult.trueCardinality = curLine;
     return execResult;
+  }
+
+  /// FIXME: largely copied from executeNode, simplify / decompose the two
+  public static String getSqlToExecute(RelNode node)
+  {
+    QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    PreparedStatement ps = null;
+    CalciteConnection curConn = null;
+    String sql = "";
+    ResultSet rs = null;
+    clearCache();
+
+    try {
+      curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
+
+    try {
+      RelRunner runner = curConn.unwrap(RelRunner.class);
+      ps = runner.prepare(node);
+      //ps.setQueryTimeout(1);
+      long start = System.currentTimeMillis();
+      rs = ps.executeQuery();
+      System.out.println("THIS SHOULD NEVER BE PRINTED");
+      System.out.println(node);
+      System.exit(-1);
+    } catch (Exception e) {
+      // do nothing, since this would be triggered by the queryTimeOut.
+      String error = e.toString();
+      int sqlStart = error.indexOf("[") + 1;
+      int sqlEnd = error.lastIndexOf("]");
+
+      sql = error.substring(sqlStart, sqlEnd);
+      //System.out.println(sql);
+    }
+
+    /* clean up the remaining used resources */
+
+    try {
+      curConn.close();
+      ps.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
+
+    return sql;
   }
 }
