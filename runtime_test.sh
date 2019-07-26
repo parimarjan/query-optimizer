@@ -10,7 +10,7 @@ do
   for query in "${queries[@]}"
   do
   echo $query
-  ./drop_cache.sh
+  ./drop_cache_local.sh
   echo "run $i"
   #sleep 3
   START_TIME=$SECONDS

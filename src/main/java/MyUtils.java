@@ -199,7 +199,7 @@ public class MyUtils {
 
   private static void clearCache()
   {
-      //System.out.println("clear cache...");
+      System.out.println("clear cache...");
       try {
         String cmd = "./drop_cache.sh";
         Process cmdProc = Runtime.getRuntime().exec(cmd);

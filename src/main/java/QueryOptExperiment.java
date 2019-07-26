@@ -130,6 +130,7 @@ public class QueryOptExperiment {
     public String dbUrl = "";
     // FIXME: make this command line arg
     public String pgUrl = "jdbc:postgresql://localhost:5432/imdb";
+
     //public String user = "ubuntu";
     //public String pwd = "ubuntu";
     public String user = "pari";
