@@ -450,12 +450,15 @@ public class MyUtils {
   /// FIXME: largely copied from executeNode, simplify / decompose the two
   public static String getSqlToExecute(RelNode node)
   {
+    long start = System.currentTimeMillis();
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     PreparedStatement ps = null;
     CalciteConnection curConn = null;
     String sql = "";
     ResultSet rs = null;
-    clearCache();
+
+    // ...clearing cache slows down everything by too much...
+    //clearCache();
 
     try {
       curConn = (CalciteConnection) DriverManager.getConnection(params.dbUrl);
@@ -467,20 +470,34 @@ public class MyUtils {
     try {
       RelRunner runner = curConn.unwrap(RelRunner.class);
       ps = runner.prepare(node);
-      //ps.setQueryTimeout(1);
-      long start = System.currentTimeMillis();
+      ps.setQueryTimeout(1);
       rs = ps.executeQuery();
-      System.out.println("THIS SHOULD NEVER BE PRINTED");
-      System.out.println(node);
-      System.exit(-1);
+      System.out.println("could not get executed sql for query");
+      // FIXME: extract them from the logs?
+      // FIX this shit.
+      File file = new File("./logfile");
+      String logStr = null;
+      try {
+        logStr = FileUtils.readFileToString(file, "UTF-8");
+        int sqlStart = logStr.lastIndexOf("SELECT COUNT(*)");
+        int sqlEnd = logStr.indexOf("2019", sqlStart);
+        if (sqlEnd < 0) {
+          sql = logStr.substring(sqlStart);
+        } else {
+          sql = logStr.substring(sqlStart, sqlEnd);
+        }
+        System.out.println(sql);
+      } catch (Exception e) {
+        System.out.println("fucked reading file");
+        e.printStackTrace();
+        System.exit(-1);
+      }
     } catch (Exception e) {
       // do nothing, since this would be triggered by the queryTimeOut.
       String error = e.toString();
       int sqlStart = error.indexOf("[") + 1;
       int sqlEnd = error.lastIndexOf("]");
-
       sql = error.substring(sqlStart, sqlEnd);
-      //System.out.println(sql);
     }
 
     /* clean up the remaining used resources */
@@ -493,6 +510,8 @@ public class MyUtils {
       System.exit(-1);
     }
 
+    long end = System.currentTimeMillis();
+    System.out.println("getSql time: " + (end-start));
     return sql;
   }
 }

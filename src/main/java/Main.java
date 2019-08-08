@@ -21,6 +21,7 @@ class Main {
     options.addOption(newOption("maxExecutionTime", "Query Timeout for execution on DBMS"));
     options.addOption(newOption("numExecutionReps", "number of times each planner should be executed on dbms"));
     options.addOption(newOption("clearCache", "reward at every step, or only at end. Boolean: 0 or 1"));
+    options.addOption(newOption("getSqlToExecute", ""));
     options.addOption(newOption("recomputeFixedPlanners", "Recompute plans / costs for all heuristics. Boolean: 0 or 1"));
     options.addOption(newOption("onlyFinalReward", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("lopt", "Use the LoptOptimizeJoinRule planner or not. boolean: 0 or 1"));
@@ -66,6 +67,7 @@ class Main {
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
     boolean clearCache = (Integer.parseInt(cmd.getOptionValue("clearCache", "1")) == 1);
+    boolean getSqlToExecute = (Integer.parseInt(cmd.getOptionValue("getSqlToExecute", "0")) == 1);
     boolean recomputeFixedPlanners = (Integer.parseInt(cmd.getOptionValue("recomputeFixedPlanners", "0")) == 1);
     boolean useIndexNestedLJ = (Integer.parseInt(cmd.getOptionValue("useIndexNestedLJ", "1")) == 1);
 
@@ -90,6 +92,7 @@ class Main {
     System.out.println("numExecutionReps " + numExecutionReps);
     System.out.println("maxExecutionTime " + maxExecutionTime);
     System.out.println("clearCache " + clearCache);
+    System.out.println("getSqlToExecute " + getSqlToExecute);
 
     // FIXME: this should be part of the params interface as well.
     ArrayList<QueryOptExperiment.PLANNER_TYPE> plannerTypes = new ArrayList<QueryOptExperiment.PLANNER_TYPE>();
@@ -116,6 +119,7 @@ class Main {
     params.dbUrl = dbUrl;
     params.python = python;
     params.clearCache = clearCache;
+    params.getSqlToExecute = getSqlToExecute;
     params.recomputeFixedPlanners = recomputeFixedPlanners;
     params.train = train;
     params.numExecutionReps = numExecutionReps;

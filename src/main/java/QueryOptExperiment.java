@@ -127,6 +127,8 @@ public class QueryOptExperiment {
     public boolean recomputeFixedPlanners = true;
     public Integer maxExecutionTime = 1200;
     public boolean python = true;
+    // pain, fucking pain
+    public boolean getSqlToExecute = false;
     public String dbUrl = "";
     // FIXME: make this command line arg
     public String pgUrl = "jdbc:postgresql://localhost:5432/imdb";
@@ -322,7 +324,7 @@ public class QueryOptExperiment {
       Query query = queries.get(nextQuery);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
-      System.out.println(query.sql);
+      //System.out.println(query.sql);
 
       String sqlQuery = query.sql;
       currentQuery = query;
@@ -450,9 +452,10 @@ public class QueryOptExperiment {
       query.joinOrders.put(plannerName, joinOrder);
       query.planningTimes.put(plannerName, planningTime);
 
-      String sqlToExecute = MyUtils.getSqlToExecute(optimizedNode);
-      //System.out.println(sqlToExecute);
-      query.executedSqls.put(plannerName, sqlToExecute);
+      if (params.getSqlToExecute) {
+        String sqlToExecute = MyUtils.getSqlToExecute(optimizedNode);
+        query.executedSqls.put(plannerName, sqlToExecute);
+      }
 
       if (params.execOnDB) {
         execPlannerOnDB(query, plannerName, optimizedNode);
