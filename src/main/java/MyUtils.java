@@ -157,9 +157,19 @@ public class MyUtils {
       int filterStart = cond.indexOf(",")+1;
       int filterEnd = cond.indexOf(")", filterStart);
       String filterCond = cond.substring(filterStart, filterEnd);
-      filterCond = filterCond.replace("'", "");
-      filterCond = filterCond.replace(" ", "");
+      // only replace the first and last occurence of '
+      //filterCond = filterCond.replace("'", "");
+      filterStart = filterCond.indexOf("'")+1;
+      filterEnd = filterCond.lastIndexOf("'");
+      // integer predicates don't have '
+      if (filterStart != -1 && filterEnd != -1) {
+        filterCond = filterCond.substring(filterStart, filterEnd);
+      }
+      //filterCond = filterCond.replace(" ", "");
       //System.out.println("filterCond: " + filterCond);
+      String regex = "^\\s+";
+      filterCond = filterCond.replaceAll(regex, "");
+
       tableName +=  filterCond;
       //System.out.println(tableName);
       return tableName;
