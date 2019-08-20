@@ -89,14 +89,19 @@ public class MyMetadataQuery extends RelMetadataQuery {
     // in this case, the provided cardinality file should have entries for
     // each of the needed queries.
     // TODO: explain the format better.
-    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
+    ArrayList<String> tableNames = MyUtils.getAllTableNamesWithFilter(rel);
     Double rowCount = null;
     if (params.cardinalities != null) {
       java.util.Collections.sort(tableNames);
       String tableKey = "";
-      for (String tN : tableNames) {
-        tableKey += " " + tN;
+      //for (String tN : tableNames) {
+        //tableKey += " " + tN;
+      //}
+      tableKey += tableNames.get(0);
+      for (int ti=1; ti < tableNames.size(); ti++) {
+        tableKey += " " + tableNames.get(ti);
       }
+
       if (!tableKey.contains("null")) {
         // FIXME: fix the join-order-benchmark case
         //String fileName = "join-order-benchmark/" + query.queryName;
@@ -115,7 +120,6 @@ public class MyMetadataQuery extends RelMetadataQuery {
           //System.out.println("row count was null!");
           System.out.println("fileName: " + query.queryName);
           System.out.println("tableKey: " + tableKey);
-          //return 10000000.00;
           System.exit(-1);
         }
       } else {

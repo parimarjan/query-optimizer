@@ -57,7 +57,7 @@ class Main {
     Integer port = Integer.parseInt(cmd.getOptionValue("port", "5555"));
     Integer numExecutionReps = Integer.parseInt(cmd.getOptionValue("numExecutionReps", "1"));
     Integer maxExecutionTime = Integer.parseInt(cmd.getOptionValue("maxExecutionTime", "1200"));
-    Double scanCostFactor = Double.parseDouble(cmd.getOptionValue("scanCostFactor", "0.0"));
+    Double scanCostFactor = Double.parseDouble(cmd.getOptionValue("scanCostFactor", "1.0"));
 
     /// FIXME: handle booleans correctly
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);

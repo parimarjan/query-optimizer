@@ -117,10 +117,72 @@ public class MyUtils {
     return new JoinOrderFinder().run(rootRel, jo);
   }
 
+  public static ArrayList<String> getAllTableNamesWithFilter(RelNode rel)
+  {
+    if (rel == null) {
+      return null;
+    }
+    //System.out.println("getAllTableNamesWithFilter: ");
+
+    List<RelNode> inputs = rel.getInputs();
+    ArrayList<String> tableNames = new ArrayList<String>();
+    if (inputs.size() <= 1) {
+      String curTable = getTableNameWithFilter(rel);
+      tableNames.add(curTable);
+    } else {
+      for (RelNode inp : inputs) {
+        ArrayList<String> curTables = getAllTableNamesWithFilter(inp);
+        if (curTables.size() >= 1) {
+          tableNames.addAll(curTables);
+        }
+      }
+    }
+    return tableNames;
+  }
+
+  public static String getTableNameWithFilter(RelNode rel)
+  {
+    if (rel == null) {
+      return null;
+    }
+    //System.out.println("getTableName: " + rel);
+    if (rel instanceof RelSubset) {
+      RelSubset s = (RelSubset) rel;
+      return getTableNameWithFilter(s.getOriginal());
+    } else if (rel instanceof Filter) {
+      List<RexNode> conds = rel.getChildExps();
+      String cond = conds.get(0).toString();
+      String tableName = getTableNameWithFilter(rel.getInput(0));
+      // add first predicate on which there is a filter
+      int filterStart = cond.indexOf(",")+1;
+      int filterEnd = cond.indexOf(")", filterStart);
+      String filterCond = cond.substring(filterStart, filterEnd);
+      filterCond = filterCond.replace("'", "");
+      filterCond = filterCond.replace(" ", "");
+      //System.out.println("filterCond: " + filterCond);
+      tableName +=  filterCond;
+      //System.out.println(tableName);
+      return tableName;
+    } else if (rel instanceof HepRelVertex) {
+      return getTableNameWithFilter(((HepRelVertex) rel).getCurrentRel());
+    } else if (rel instanceof TableScan) {
+      List<String> names = rel.getTable().getQualifiedName();
+      if (names != null) {
+        return names.get(1);
+      }
+    }
+    return null;
+  }
+
   public static ArrayList<String> getAllTableNames(RelNode rel) {
     if (rel == null) {
       return null;
     }
+    //System.out.println("getAllTableNames: ");
+    //System.out.println(rel);
+    //String origPlan = RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
+    //System.out.println(origPlan);
+
     List<RelNode> inputs = rel.getInputs();
     ArrayList<String> tableNames = new ArrayList<String>();
     if (inputs.size() <= 1) {
@@ -141,10 +203,13 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
+    //System.out.println("getTableName: " + rel);
     if (rel instanceof RelSubset) {
       RelSubset s = (RelSubset) rel;
       return getTableName(s.getOriginal());
     } else if (rel instanceof Filter) {
+      //List<RexNode> conds = rel.getChildExps();
+      //System.out.println(conds.get(0));
       return getTableName(rel.getInput(0));
     } else if (rel instanceof HepRelVertex) {
       return getTableName(((HepRelVertex) rel).getCurrentRel());
@@ -153,9 +218,11 @@ public class MyUtils {
       if (names != null) {
         //System.out.println("table name was: " + names.get(1));
         // TODO: is the more general version ever needed?
+        //System.out.println(rel);
         //String tableName = "";
         //for (String s : names) {
           //tableName += s "-";
+          //System.out.println(s);
         //}
         //return tableName;
         return names.get(1);
