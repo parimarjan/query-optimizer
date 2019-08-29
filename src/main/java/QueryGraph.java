@@ -371,6 +371,7 @@ public class QueryGraph implements CsgCmpIterator {
       majorFactor = factors[1];
       minorFactor = factors[0];
     }
+
     final Vertex majorVertex = allVertexes.get(majorFactor);
     final Vertex minorVertex = allVertexes.get(minorFactor);
 

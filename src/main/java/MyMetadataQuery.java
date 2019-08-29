@@ -182,13 +182,21 @@ public class MyMetadataQuery extends RelMetadataQuery {
     return curCost;
   }
 
+  /* FIXME: this ensures that the cost model does not differentiate between AB
+   * or BA, and just returns the min (cost(AB), cost(BA))
+   */
   private RelOptCost getIndexNestedLoopJoinCost(Join rel) {
     // Need to ensure right is a base relation, and has an index built on it.
     MyCost curCost = new MyCost(0.0, 0.0, 0.0);
-    //RelNode right = rel.getRight();
+    RelNode right = rel.getRight();
     RelNode left = rel.getLeft();
     double leftRows = getRowCount(left);
-    curCost.cost = 2.00*leftRows;
+    double rightRows = getRowCount(right);
+    if (leftRows <= rightRows) {
+      curCost.cost = 2.00*leftRows;
+    } else {
+      curCost.cost = 2.00*rightRows;
+    }
     return curCost;
   }
 
@@ -206,7 +214,12 @@ public class MyMetadataQuery extends RelMetadataQuery {
       if (rel instanceof Join) {
         RelOptCost hashJoinCost = getHashJoinCost((Join) rel);
         ArrayList<String> rightTables = MyUtils.getAllTableNames(((Join)rel).getRight());
-        if (rightTables.size() > 1 || !params.useIndexNestedLJ) {
+        ArrayList<String> leftTables = MyUtils.getAllTableNames(((Join)rel).getLeft());
+
+        // if both the sides have more than 1 table, then can't use index
+        // nested loop join.
+        if ((rightTables.size() > 1 && leftTables.size() > 1)
+            || !params.useIndexNestedLJ) {
           return hashJoinCost;
         }
 
