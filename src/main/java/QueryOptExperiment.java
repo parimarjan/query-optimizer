@@ -292,6 +292,7 @@ public class QueryOptExperiment {
     // TODO: ugh clean up the way i handle ordering etc.
     boolean alreadyTesting = false;
     while (true) {
+
       if (trainQueries == null) {
         zmq.waitForClientTill("setTrainQueries");
       }
@@ -324,7 +325,6 @@ public class QueryOptExperiment {
       Query query = queries.get(nextQuery);
 
       if (verbose) System.out.println("nextQuery is: " + nextQuery);
-      //System.out.println(query.sql);
 
       String sqlQuery = query.sql;
       currentQuery = query;
@@ -437,6 +437,8 @@ public class QueryOptExperiment {
       long planningTime = System.currentTimeMillis() - start;
       if (verbose) System.out.println("planning time: " +
           planningTime);
+      //System.out.println("planning time: " +
+          //planningTime + " for " + plannerName);
       RelOptCost optCost = computeCost(mq, optimizedNode);
       // Time to update the query with the current results
       query.costs.put(plannerName, ((MyCost) optCost).getCost());
