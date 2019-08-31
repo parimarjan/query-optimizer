@@ -26,6 +26,7 @@ class Main {
     options.addOption(newOption("onlyFinalReward", "reward at every step, or only at end. Boolean: 0 or 1"));
     options.addOption(newOption("lopt", "Use the LoptOptimizeJoinRule planner or not. boolean: 0 or 1"));
     options.addOption(newOption("python", "Use the planner to support the python controlled open-ai style environment or not. boolean: 0 or 1"));
+    options.addOption(newOption("testCardinalities", ""));
     options.addOption(newOption("exhaustive", "use exhaustive search planner or not"));
     options.addOption(newOption("leftDeep", "use dynamic programming based left deep search planner or not"));
     options.addOption(newOption("verbose", "use exhaustive search planner or not"));
@@ -63,6 +64,7 @@ class Main {
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);
     boolean lopt = (Integer.parseInt(cmd.getOptionValue("lopt", "1")) == 1);
     boolean python = (Integer.parseInt(cmd.getOptionValue("python", "1")) == 1);
+    boolean testCardinalities = (Integer.parseInt(cmd.getOptionValue("testCardinalities", "1")) == 1);
     boolean exhaustive = (Integer.parseInt(cmd.getOptionValue("exhaustive", "0")) == 1);
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);
     boolean train = (Integer.parseInt(cmd.getOptionValue("train", "1")) == 1);
@@ -118,6 +120,7 @@ class Main {
     params.execOnDB = execOnDB;
     params.dbUrl = dbUrl;
     params.python = python;
+    params.testCardinalities = testCardinalities;
     params.clearCache = clearCache;
     params.getSqlToExecute = getSqlToExecute;
     params.recomputeFixedPlanners = recomputeFixedPlanners;
@@ -134,7 +137,11 @@ class Main {
     }
 
     QueryOptExperiment.getZMQServer().curQuerySet = null;
-    exp.start();
+    if (params.testCardinalities) {
+      exp.startTestCardinalities();
+    } else {
+      exp.start();
+    }
   }
 }
 

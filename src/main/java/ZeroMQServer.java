@@ -107,6 +107,10 @@ public class ZeroMQServer {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     switch (msg)
     {
+      case "startTestCardinalities":
+        // just a dummy call to block on java side
+        resp = "";
+        break;
       case "getCurrentQueryName":
         curQuery = QueryOptExperiment.getCurrentQuery();
         resp = curQuery.queryName;
