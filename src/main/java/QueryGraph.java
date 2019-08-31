@@ -111,16 +111,10 @@ public class QueryGraph implements CsgCmpIterator {
     edges = new ArrayList<Edge>();
     // Add the orignal tables as vertexes
     int x = 0;
-    String curQuery = QueryOptExperiment.getCurrentQuery().sql;
-    HashMap<String, Double> curQueryCard = mq.trueBaseCardinalities.get(curQuery);
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
-    if (curQueryCard == null && !params.cardinalitiesModel.equals("file")) {
-      System.out.println("!!!!curQueryCard was null!!!!!");
-      curQueryCard = new HashMap<String, Double>();
-      mq.trueBaseCardinalities.put(curQuery, curQueryCard);
-    }
-    boolean cardinalitiesUpdated = false;
-    for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
+
+    for (int i = 0; i < multiJoin.getNumJoinFactors(); i++)
+    {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
@@ -128,37 +122,11 @@ public class QueryGraph implements CsgCmpIterator {
         System.out.println("tableName null");
         System.exit(-1);
       }
-      if (!params.cardinalitiesModel.equals("file") &&
-		      mq.trueBaseCardinalities.get(curQuery).get(tableName) == null)
-      {
-        //System.out.println("tableName: " + tableName);
-        if (tableName.equals("cast_info") || tableName.equals("movie_info")) {
-          // if it is NOT a filter block
-          if (!RelOptUtil.toString(rel).contains("Filter")) {
-            if (tableName.equals("cast_info")) {
-              curQueryCard.put(tableName, 36244344.00);
-            } else if (tableName.equals("movie_info")) {
-              curQueryCard.put(tableName, 14835720.00);
-            }
-          } else {
-              Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
-              curQueryCard.put(tableName, trueCard);
-              cardinalitiesUpdated = true;
-          }
-        } else {
-          Double trueCard = QueryOptExperiment.getTrueCardinality(rel);
-          curQueryCard.put(tableName, trueCard);
-          cardinalitiesUpdated = true;
-        }
-      }
       double rowCount = mq.getRowCount(rel);
       Vertex newVertex = new LeafVertex(i, rel, rowCount, x);
       allVertexes.add(newVertex);
       updateRelNodes(newVertex);
       x += rel.getRowType().getFieldCount();
-    }
-    if (cardinalitiesUpdated) {
-      mq.saveUpdatedCardinalities();
     }
 
     // add the Edges

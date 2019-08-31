@@ -38,6 +38,14 @@ import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.rel.rel2sql.SqlImplementor.Result;
 import org.apache.calcite.sql.SqlNode;
 
+// for parallel execution
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import org.apache.calcite.rel.core.RelFactories;
+
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
@@ -89,10 +97,41 @@ public class QueryOptExperiment {
     public static final ImmutableList<RelOptRule> GREEDY_RULES =
         ImmutableList.of(MultiJoinOptimizeBushyRule.INSTANCE);
 
-    public ImmutableList<RelOptRule> getRules() {
+    public List<RelOptRule> getRules() {
+      ArrayList<RelOptRule> rules = new ArrayList<RelOptRule>();
       switch(this){
         case EXHAUSTIVE:
-          return EXHAUSTIVE_RULES;
+          RelOptRule exhRule = new ExhaustiveDPJoinOrderRule(RelFactories.LOGICAL_BUILDER);
+          rules.add(exhRule);
+          return rules;
+        case LOpt:
+          return LOPT_RULES;
+        case RANDOM:
+          return RANDOM_RULES;
+        case BUSHY:
+          return BUSHY_RULES;
+        case RL:
+          return RL_RULES;
+        case LEFT_DEEP:
+          return LEFT_DEEP_RULES;
+        default:
+          return null;
+      }
+    }
+
+    public List<RelOptRule> getRules(String queryName) {
+      ArrayList<RelOptRule> rules = new ArrayList<RelOptRule>();
+      // TODO: add the common ones
+
+      switch(this){
+        case EXHAUSTIVE:
+          ExhaustiveDPJoinOrderRule exhRule =
+            new ExhaustiveDPJoinOrderRule(RelFactories.LOGICAL_BUILDER);
+          exhRule.setQueryName(queryName);
+          rules.add(exhRule);
+          return rules;
+
+        // FIXME: initialize rules with sql etc. here
         case LOpt:
           return LOPT_RULES;
         case RANDOM:
@@ -142,8 +181,7 @@ public class QueryOptExperiment {
     public boolean clearCache = false;
     public String cardinalitiesModel = "file";
     public String cardinalitiesModelFile = "./pg.json";
-    //public String cardinalityError = "noError";
-    //public Integer cardErrorRange = 10;
+
     // num reps for runtimes
     public Integer numExecutionReps = 1;
     public boolean train = false;
@@ -152,6 +190,7 @@ public class QueryOptExperiment {
     public HashMap<String, HashMap<String, Long>> cardinalities = null;
     public boolean useIndexNestedLJ;
     public Double scanCostFactor;
+    public boolean testCardinalities;
 
     public Params() {
 
@@ -259,9 +298,11 @@ public class QueryOptExperiment {
   {
     ArrayList<Query> queryList = null;
     if (mode.equals("train")) {
+      System.out.println("setQueries mode: train");
       trainQueries = new ArrayList<Query>();
       queryList = trainQueries;
     } else {
+      System.out.println("setQueries mode: test");
       testQueries = new ArrayList<Query>();
       queryList = testQueries;
     }
@@ -274,6 +315,144 @@ public class QueryOptExperiment {
       System.exit(-1);
     }
     if (verbose) System.out.println("successfully setQueries!");
+  }
+
+  public class OptimizationJob implements Callable<RelNode>
+  {
+		String sql;
+		String queryName;
+    Planner optPlanner;
+    public OptimizationJob(Query query)
+    {
+			this.sql = query.sql;
+      this.queryName = query.queryName;
+      PLANNER_TYPE t = PLANNER_TYPE.EXHAUSTIVE;
+      try {
+        Frameworks.ConfigBuilder bld = getDefaultFrameworkBuilder();
+        bld.programs(MyJoinUtils.genJoinRule(t.getRules(queryName), 1));
+        optPlanner = Frameworks.getPlanner(bld.build());
+      } catch (Exception e) {
+        System.out.println(e);
+        System.exit(-1);
+      }
+    }
+
+    @Override
+    public RelNode call() throws Exception {
+      optPlanner.close();
+      optPlanner.reset();
+      RelNode node = null;
+      try {
+        SqlNode sqlNode = optPlanner.parse(sql);
+        SqlNode validatedSqlNode = optPlanner.validate(sqlNode);
+        node = optPlanner.rel(validatedSqlNode).project();
+      } catch (Exception e) {
+        System.out.println(e);
+        System.out.println("failed in getting Relnode from  " + sql);
+        System.exit(-1);
+      }
+
+      DbInfo.setCurrentQueryVisibleFeatures(node);
+      RelTraitSet traitSet = optPlanner.getEmptyTraitSet().replace(EnumerableConvention.INSTANCE);
+
+      try {
+        // using the default volcano planner.
+        long start = System.currentTimeMillis();
+        RelNode optNode = optPlanner.transform(0, traitSet, node);
+        return optNode;
+      } catch (Exception e) {
+        System.out.println(e);
+        System.exit(-1);
+      }
+      // would never reach this.
+      return null;
+	  }
+  }
+
+  /* Optimizes all the nodes specified in trainQueries in parallel.
+   */
+  private ArrayList<RelNode> optimizeNodesParallel()
+  {
+    ArrayList<RelNode> nodes = new ArrayList<RelNode>();
+    ExecutorService executor = Executors.newFixedThreadPool(10);
+    List<Future<RelNode>> results = new ArrayList<Future<RelNode>>();
+
+    // TODO: this should happen in parallel
+    for (int i = 0; i < trainQueries.size(); i++)
+    {
+      Query curQuery = trainQueries.get(i);
+      results.add(executor.submit(new OptimizationJob(curQuery)));
+    }
+    System.out.println("executors submitted");
+
+    for (int i = 0; i < results.size(); i++) {
+      Future<RelNode> result = results.get(i);
+      try {
+        RelNode node = result.get(5, TimeUnit.SECONDS);
+        nodes.add(node);
+      } catch (Exception e) {
+          // interrupts if there is any possible error
+          result.cancel(true);
+      }
+    }
+    // FIXME: is it worth reusing these executors through the experiment?
+    try {
+      executor.shutdown();
+      executor.awaitTermination(1, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(-1);
+    }
+    return nodes;
+  }
+
+  public void startTestCardinalities() throws Exception
+  {
+    System.out.println("testCardinalities starting");
+    if (params.python) zmq.waitForClientTill("getAttrCount");
+
+    // checked in JoinOrder rules, in the RL settings, we update the
+    // currentQuery structure with the appropriate order and other information
+    // etc.
+    currentQuery = null;
+
+    // FIXME: need to put up break conditions
+    while (true) {
+      if (trainQueries == null) {
+        zmq.waitForClientTill("setQueries");
+      }
+      // the python side should set cardinalities etc. at this point
+      zmq.waitForClientTill("setCardinalities");
+      zmq.waitForClientTill("startTestCardinalities");
+
+      // for every batch of estimations, we want to recompute the cost. But for
+      // the true estimates, we should only need to do it once, so not creating
+      // a new HashMap for zmq.optCosts
+      zmq.estCosts = new HashMap<String, Double>();
+
+      ArrayList<RelNode> estNodes = optimizeNodesParallel();
+
+      zmq.waitForClientTill("setCardinalities");
+      // cardinalities must be changed by now
+      ArrayList<RelNode> optNodes = optimizeNodesParallel();
+
+      for (int i = 0; i < optNodes.size(); i++) {
+        String queryName = trainQueries.get(i).queryName;
+        mq.setQueryName(queryName);
+        Double estCost = computeCost(mq, estNodes.get(i)).getCost();
+        Double optCost = computeCost(mq, optNodes.get(i)).getCost();
+        zmq.estCosts.put(queryName, estCost);
+        zmq.optCosts.put(queryName, optCost);
+      }
+
+      // set variables in zmq
+      zmq.waitForClientTill("getEstCardinalityCosts");
+      zmq.waitForClientTill("getOptCardinalityCosts");
+
+      if (false) {
+        break;
+      }
+    }
   }
 
   /* FIXME: finalize queries semantics AND write explanation.
@@ -294,12 +473,8 @@ public class QueryOptExperiment {
     while (true) {
 
       if (trainQueries == null) {
-        zmq.waitForClientTill("setTrainQueries");
+        zmq.waitForClientTill("setQueries");
       }
-
-      //if (testQueries == null) {
-        //zmq.waitForClientTill("setTestQueries");
-      //}
 
       if (verbose) System.out.println("total queries: " + trainQueries.size());
       // at this point, all the other planners would have executed on the
@@ -358,8 +533,8 @@ public class QueryOptExperiment {
     }
   }
 
-  private RelOptCost computeCost(RelMetadataQuery mq, RelNode node) {
-    return ((MyMetadataQuery) mq).getCumulativeCost(node);
+  private MyCost computeCost(RelMetadataQuery mq, RelNode node) {
+    return (MyCost) ((MyMetadataQuery) mq).getCumulativeCost(node);
   }
 
   private void execPlannerOnDB(Query query, String plannerName, RelNode node)

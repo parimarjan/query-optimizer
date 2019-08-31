@@ -44,7 +44,9 @@ import org.apache.calcite.rel.rel2sql.SqlImplementor.Result;
 import org.apache.calcite.sql.SqlNode;
 import java.util.Random;
 
-public class MyMetadataQuery extends RelMetadataQuery {
+public class MyMetadataQuery extends RelMetadataQuery
+{
+
   private class JsonCardinalities
   {
     Map<String, Map<String, Double>> cardinalities;
@@ -56,11 +58,11 @@ public class MyMetadataQuery extends RelMetadataQuery {
   // TODO: support options: CM2, rowCount, MM
   private final String COST_MODEL_NAME;
 
-  // FIXME: temporary solution. make this general purpose.
-  private final String BASE_CARDINALITIES_FILE_NAME = "cardinalities.ser";
-  public HashMap<String, HashMap<String, Double>> trueBaseCardinalities;
-  // private final String CARDINALITIES_FILE = "test.json";
-  //public HashMap<String, HashMap<String, Long>> cards;
+  /// so can access statistics about THIS particular sql
+  String queryName = null;
+  public void setQueryName(String queryName) {
+    this.queryName = queryName;
+  }
 
   /**
    * Returns an instance of RelMetadataQuery. It ensures that cycles do not
@@ -74,93 +76,63 @@ public class MyMetadataQuery extends RelMetadataQuery {
       RelMetadataQuery prototype) {
 		super(metadataProvider, prototype);
     this.COST_MODEL_NAME = QueryOptExperiment.getCostModelName();
-    trueBaseCardinalities = (HashMap) loadCardinalities();
-    if (trueBaseCardinalities == null) {
-      trueBaseCardinalities = new HashMap<String, HashMap<String, Double>>();
-    }
   }
 
   @Override
-  public Double getRowCount(RelNode rel) {
-
+  public Double getRowCount(RelNode rel)
+  {
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
-    Query query = QueryOptExperiment.getCurrentQuery();
+    if (params.cardinalities == null) {
+      System.err.println("params.cardinalities need to be set to use this metadata provider");
+      System.exit(-1);
+    }
+
+    String curQueryName;
+    if (queryName == null) {
+      System.out.println("queryName null");
+      Query query = QueryOptExperiment.getCurrentQuery();
+      curQueryName = query.queryName;
+    } else {
+      curQueryName = queryName;
+    }
 
     // in this case, the provided cardinality file should have entries for
     // each of the needed queries.
-    // TODO: explain the format better.
     ArrayList<String> tableNames = MyUtils.getAllTableNamesWithFilter(rel);
     Double rowCount = null;
-    if (params.cardinalities != null) {
-      java.util.Collections.sort(tableNames);
-      String tableKey = "";
-      //for (String tN : tableNames) {
-        //tableKey += " " + tN;
-      //}
-      tableKey += tableNames.get(0);
-      for (int ti=1; ti < tableNames.size(); ti++) {
-        tableKey += " " + tableNames.get(ti);
-      }
 
-      if (!tableKey.contains("null")) {
-        // FIXME: fix the join-order-benchmark case
-        //String fileName = "join-order-benchmark/" + query.queryName;
-        String key = query.queryName;
-        HashMap<String, Long> qCards = params.cardinalities.get(key);
-        if (qCards == null) {
-          System.out.println("qCards is null for key: " + key);
-          System.exit(-1);
-        } else {
-          Long rowCountLong = qCards.get(tableKey);
-          //System.out.println("found rowCount from file!: " + rowCount);
-          if (rowCountLong != null) {
-            rowCount = rowCountLong.doubleValue();
-            return rowCount;
-          }
-          //System.out.println("row count was null!");
-          System.out.println("fileName: " + query.queryName);
-          System.out.println("tableKey: " + tableKey);
-          System.exit(-1);
-        }
+    java.util.Collections.sort(tableNames);
+    String tableKey = "";
+    tableKey += tableNames.get(0);
+    for (int ti=1; ti < tableNames.size(); ti++) {
+      tableKey += " " + tableNames.get(ti);
+    }
+
+    if (!tableKey.contains("null")) {
+      String key = curQueryName;
+      HashMap<String, Long> qCards = params.cardinalities.get(key);
+      if (qCards == null) {
+        System.out.println("qCards is null for key: " + key);
+        System.exit(-1);
       } else {
-        // these seem to happen mostly for aggregate nodes etc.
-        // System.out.println("tableKey had null: " + tableKey);
-        // System.out.println(rel);
-      }
-    }
-    if (rowCount == null) {
-      // Default: use true cardinalities for the base tables, and calcite's
-      // default handling for all the joins (some sort of very simple Selinger
-      // model...)
-      String sqlQuery = query.sql;
-      HashMap<String, Double> curQueryMap = trueBaseCardinalities.get(sqlQuery);
-      if (curQueryMap == null) {
-        //System.out.println("case 1");
-        rowCount = super.getRowCount(rel);
-      }
-      if (rel instanceof Filter || rel instanceof TableScan) {
-        String tableName = MyUtils.getTableName(rel);
-        if (tableName == null) {
-          rowCount = super.getRowCount(rel);
-        } else {
-          rowCount = curQueryMap.get(tableName);
+        Long rowCountLong = qCards.get(tableKey);
+        //System.out.println("found rowCount from file!: " + rowCount);
+        if (rowCountLong != null) {
+          rowCount = rowCountLong.doubleValue();
+          return rowCount;
         }
-        if (rowCount == null) {
-          //System.out.println("case 2");
-          rowCount = super.getRowCount(rel);
-        }
-      } else if (rel instanceof RelSubset) {
-        // this seems like it should need special handling, but it probably wraps
-        // around either Filter / TableScan, so it will be handled when this
-        // function is called again.
-        rowCount = super.getRowCount(rel);
+        //System.out.println("row count was null!");
+        System.out.println("fileName: " + curQueryName);
+        System.out.println("tableKey: " + tableKey);
+        System.exit(-1);
       }
-      if (rowCount == null) {
-        //System.out.println("case 5");
-        rowCount = super.getRowCount(rel);
-      }
+    } else {
+       // these seem to happen mostly for aggregate nodes etc.
+       //System.out.println("tableKey had null: " + tableKey);
+       //System.out.println(rel);
+       return 1.00;
     }
-    //System.out.println("final rowCount returned: " + rowCount);
+
     return rowCount;
   }
 
@@ -257,45 +229,6 @@ public class MyMetadataQuery extends RelMetadataQuery {
       }
     }
     return origCost;
-  }
-
-  public void saveUpdatedCardinalities() {
-    HashMap<String, HashMap<String, Double>> oldCosts = (HashMap) loadCardinalities();
-    HashMap<String, HashMap<String, Double>> newCosts = new HashMap<String, HashMap<String, Double>>();
-    if (oldCosts != null){
-      // ignore this guy, file probably didn't exist.
-      newCosts.putAll(oldCosts);
-    }
-    newCosts.putAll(trueBaseCardinalities);
-    saveCardinalities(newCosts);
-  }
-
-  // FIXME: make these general purpose
-  private void saveCardinalities(Serializable obj)
-  {
-		try {
-			ObjectOutputStream oos = new ObjectOutputStream(
-							new FileOutputStream(BASE_CARDINALITIES_FILE_NAME)
-			);
-			oos.writeObject(obj);
-			oos.flush();
-			oos.close();
-		} catch (Exception e) {
-			// System.out.println(e);
-		}
-  }
-
-  public Serializable loadCardinalities() {
-    try {
-      FileInputStream fis = new FileInputStream(BASE_CARDINALITIES_FILE_NAME);
-      ObjectInputStream ois = new ObjectInputStream(fis);
-      HashMap<String, HashMap<String, Double>> cards = (HashMap) ois.readObject();
-      ois.close();
-      return cards;
-    } catch (Exception e) {
-      // System.out.println(e);
-    }
-    return null;
   }
 }
 

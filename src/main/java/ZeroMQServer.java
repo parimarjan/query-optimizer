@@ -38,6 +38,9 @@ public class ZeroMQServer {
   public ArrayList<Integer> curQuerySet;
   public ArrayList<Integer> joinOrderSeq = new ArrayList<Integer>();
 
+  public HashMap<String, Double> estCosts = null;
+  public HashMap<String, Double> optCosts = new HashMap<String, Double>();
+
   /* Utilizes the simplest ZeroMQ protocol (PAIR), to communicate resuts / and
    * synchronize with a Python client.
    * @port: used by ZeroMQ for communication. Must be same on the client
@@ -105,8 +108,23 @@ public class ZeroMQServer {
     String plannerName;
     Query curQuery;
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
+    Gson gson;
     switch (msg)
     {
+      case "startTestCardinalities":
+        // just a dummy call to block on java side
+        resp = "";
+        break;
+      case "getOptCardinalityCosts":
+        // convert HashMap to String
+        gson = new Gson();
+        resp = gson.toJson(optCosts);
+        break;
+      case "getEstCardinalityCosts":
+        // convert HashMap to String
+        gson = new Gson();
+        resp = gson.toJson(estCosts);
+        break;
       case "getCurrentQueryName":
         curQuery = QueryOptExperiment.getCurrentQuery();
         resp = curQuery.queryName;
@@ -126,7 +144,7 @@ public class ZeroMQServer {
         responder.send(resp.toString());
         request = responder.recv(0);
         String jsonStr = new String(request);
-        Gson gson = new Gson();
+        gson = new Gson();
         QueryOptExperiment.setQueries(mode, gson.fromJson(jsonStr, new TypeToken<HashMap<String, String>>() {}.getType()));
         break;
       case "execOnDB":

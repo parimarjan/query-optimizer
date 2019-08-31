@@ -42,6 +42,11 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
   public static final ExhaustiveDPJoinOrderRule INSTANCE =
       new ExhaustiveDPJoinOrderRule(RelFactories.LOGICAL_BUILDER);
 
+  String queryName = null;
+  public void setQueryName(String queryName) {
+    this.queryName = queryName;
+  }
+
   private class IntermediateJoinState {
     ArrayList<ImmutableBitSet[]> bestJoins;
     double cost;
@@ -52,6 +57,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       this.cost = cost;
     }
   }
+
   // The keys represent a set of factors in the original vertices of the
   // QueryGraph. The values represent a sequence of edges (it's index at each
   // stage in QueryGraph.edges) that are chosen for the optimal memoized
@@ -86,6 +92,10 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     final MultiJoin multiJoinRel = call.rel(0);
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
     final MyMetadataQuery mq = MyMetadataQuery.instance();
+    if (queryName != null) {
+      mq.setQueryName(queryName);
+    }
+
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
 			 // no edges have been chosen yet, so we add an empty list
@@ -154,26 +164,36 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     // Not checking for null here, as we MUST have this in memoizedBestJoins,
     // or else something is wrong with the algorithm and it might as well
     // crash.
-    Query curQuery = QueryOptExperiment.getCurrentQuery();
-    curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
-    HashMap<ArrayList<String>, Double> optCosts =
-              new HashMap<ArrayList<String>, Double>();
-    ArrayList<int[]> joinOrder = new ArrayList<int[]>();
-
     ArrayList<ImmutableBitSet[]> optOrdering =
       memoizedBestJoins.get(ImmutableBitSet.range(0,
             multiJoin.getNumJoinFactors())).bestJoins;
-
     QueryGraph finalQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
 
-    for (ImmutableBitSet[] factors : optOrdering) {
-      int[] factorIndices = finalQG.updateGraphBitset(factors);
-      joinOrder.add(factorIndices);
-      optCosts.put(finalQG.getLastNodeTables(), finalQG.lastCost);
-    }
-    curQuery.joinOrders.get("EXHAUSTIVE").joinEdgeChoices = joinOrder;
-    curQuery.joinOrders.get("EXHAUSTIVE").joinCosts = optCosts;
+    Query curQuery = QueryOptExperiment.getCurrentQuery();
 
+    if (curQuery != null) {
+      System.out.println("curQuery NOT NULL");
+      // in testCardinalities case, we do not need to set these up
+      curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
+      HashMap<ArrayList<String>, Double> optCosts =
+                new HashMap<ArrayList<String>, Double>();
+      ArrayList<int[]> joinOrder = new ArrayList<int[]>();
+
+      for (ImmutableBitSet[] factors : optOrdering) {
+        int[] factorIndices = finalQG.updateGraphBitset(factors);
+        joinOrder.add(factorIndices);
+        optCosts.put(finalQG.getLastNodeTables(), finalQG.lastCost);
+      }
+      curQuery.joinOrders.get("EXHAUSTIVE").joinEdgeChoices = joinOrder;
+      curQuery.joinOrders.get("EXHAUSTIVE").joinCosts = optCosts;
+    } else {
+      for (ImmutableBitSet[] factors : optOrdering) {
+        int[] factorIndices = finalQG.updateGraphBitset(factors);
+      }
+    }
+
+    // before calling this, we need to have completed the updateGraphBitset
+    // loop
     RelNode optNode = finalQG.getFinalOptimalRelNode();
     call.transformTo(optNode);
   }
