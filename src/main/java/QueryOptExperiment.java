@@ -392,6 +392,9 @@ public class QueryOptExperiment {
       } catch (Exception e) {
           // interrupts if there is any possible error
           result.cancel(true);
+          e.printStackTrace();
+          System.out.println("Error while running search algorithm, so crashing");
+          System.exit(-1);
       }
     }
     // FIXME: is it worth reusing these executors through the experiment?
@@ -429,20 +432,28 @@ public class QueryOptExperiment {
       // the python side should set cardinalities etc. at this point
       zmq.waitForClientTill("setCardinalities");
 
-      //zmq.waitForClientTill("setCardinalities");
-      // cardinalities must be changed by now
       ArrayList<RelNode> optNodes = optimizeNodesParallel();
+
+      if (estNodes.size() != optNodes.size()) {
+        System.out.println("should have optimized nodes for both estimated and true cardinalities");
+        System.exit(-1);
+      }
 
       // for every batch of estimations, we want to recompute the cost. But for
       // the true estimates, we should only need to do it once, so not creating
       // a new HashMap for zmq.optCosts
       zmq.estCosts = new HashMap<String, Double>();
+      zmq.optCosts = new HashMap<String, Double>();
 
       for (int i = 0; i < optNodes.size(); i++) {
         String queryName = trainQueries.get(i).queryName;
         mq.setQueryName(queryName);
         Double estCost = computeCost(mq, estNodes.get(i)).getCost();
         Double optCost = computeCost(mq, optNodes.get(i)).getCost();
+        if (queryName.equals("1062510563782308795454436663573014615259135596985")) {
+          System.out.println("found debug query");
+          System.out.println("optCost: " + optCost + " estCost: " + estCost);
+        }
         zmq.estCosts.put(queryName, estCost);
         zmq.optCosts.put(queryName, optCost);
       }

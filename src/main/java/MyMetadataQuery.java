@@ -125,6 +125,7 @@ public class MyMetadataQuery extends RelMetadataQuery
         System.out.println("fileName: " + curQueryName);
         System.out.println("tableKey: " + tableKey);
         System.exit(-1);
+        //return 10000000000.00;
       }
     } else {
        // these seem to happen mostly for aggregate nodes etc.
