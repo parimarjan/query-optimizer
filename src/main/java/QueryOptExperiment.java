@@ -383,7 +383,6 @@ public class QueryOptExperiment {
       Query curQuery = trainQueries.get(i);
       results.add(executor.submit(new OptimizationJob(curQuery)));
     }
-    System.out.println("executors submitted");
 
     for (int i = 0; i < results.size(); i++) {
       Future<RelNode> result = results.get(i);
@@ -421,20 +420,23 @@ public class QueryOptExperiment {
       if (trainQueries == null) {
         zmq.waitForClientTill("setQueries");
       }
+
       // the python side should set cardinalities etc. at this point
       zmq.waitForClientTill("setCardinalities");
       zmq.waitForClientTill("startTestCardinalities");
+      ArrayList<RelNode> estNodes = optimizeNodesParallel();
+
+      // the python side should set cardinalities etc. at this point
+      zmq.waitForClientTill("setCardinalities");
+
+      //zmq.waitForClientTill("setCardinalities");
+      // cardinalities must be changed by now
+      ArrayList<RelNode> optNodes = optimizeNodesParallel();
 
       // for every batch of estimations, we want to recompute the cost. But for
       // the true estimates, we should only need to do it once, so not creating
       // a new HashMap for zmq.optCosts
       zmq.estCosts = new HashMap<String, Double>();
-
-      ArrayList<RelNode> estNodes = optimizeNodesParallel();
-
-      zmq.waitForClientTill("setCardinalities");
-      // cardinalities must be changed by now
-      ArrayList<RelNode> optNodes = optimizeNodesParallel();
 
       for (int i = 0; i < optNodes.size(); i++) {
         String queryName = trainQueries.get(i).queryName;
