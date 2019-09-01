@@ -63,7 +63,8 @@ public class QueryGraph implements CsgCmpIterator {
   // Used to get the RelNode corresponding to the Joins we have done so far.
   // These RelNodes are required to run our custom cost models using the
   // MetadataQuery interface
-  List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
+  //List<Pair<RelNode, TargetMapping>> relNodes = new ArrayList<>();
+  List<Pair<RelNode, TargetMapping>> relNodes;
   private MyMetadataQuery mq;
 
   // FIXME: maybe we can build this independently of this? Not sure if this
@@ -80,11 +81,18 @@ public class QueryGraph implements CsgCmpIterator {
   public QueryGraph(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder
       rexBuilder, RelBuilder relBuilder)
   {
+    this.reset(multiJoin, mq, rexBuilder, relBuilder);
+  }
+
+  public void reset(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder
+      rexBuilder, RelBuilder relBuilder)
+  {
 		this.costSoFar = 0.00;
     this.multiJoin = multiJoin;
     this.rexBuilder = rexBuilder;
     this.relBuilder = relBuilder;
     this.mq = mq;
+    this.relNodes = new ArrayList<>();
 
     // set up the mapping to database offsets for each of our attributes
     HashMap<String, Integer> tableOffsets = DbInfo.getAllTableFeaturesOffsets();
@@ -128,7 +136,6 @@ public class QueryGraph implements CsgCmpIterator {
       updateRelNodes(newVertex);
       x += rel.getRowType().getFieldCount();
     }
-
     // add the Edges
     for (RexNode node : multiJoin.getJoinFilters()) {
       edges.add(createEdge(node));
@@ -370,13 +377,6 @@ public class QueryGraph implements CsgCmpIterator {
       }
     }
 
-		// FIXME: these variables need to be renamed to estRowCount
-    //double rowCount =
-        //majorVertex.cost
-        //* minorVertex.cost
-        //* RelMdUtil.guessSelectivity(
-            //RexUtil.composeConjunction(rexBuilder, conditions, false));
-
     final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
         newFactors, 0.00, ImmutableList.copyOf(conditions), newFeatures);
     allVertexes.add(newVertex);
@@ -400,6 +400,7 @@ public class QueryGraph implements CsgCmpIterator {
         edges.set(i, newEdge);
       }
     }
+
     // we update the relNodes right away so we can use those to compute the
     // cost using our cost model
     updateRelNodes(newVertex);
@@ -468,12 +469,7 @@ public class QueryGraph implements CsgCmpIterator {
           Mappings.merge(leftMapping,
               Mappings.offsetTarget(rightMapping,
                   left.getRowType().getFieldCount()));
-      if (pw != null) {
-        pw.println("left: " + leftMapping);
-        pw.println("right: " + rightMapping);
-        pw.println("combined: " + mapping);
-        pw.println();
-      }
+
       // TODO: what is the use of this shuttle + mappings here?
       // TODO: examine condition before / after the modifications to see
       // whats up. Seems to be making sure that the ids are mapped to the
@@ -604,8 +600,6 @@ public class QueryGraph implements CsgCmpIterator {
     // should be in S, i.e., the size of intersection should be 1.
     ImmutableBitSet.Builder neighborsBld = ImmutableBitSet.builder();
     for (Edge edge : edges) {
-      //System.out.println("edge.factors: " + edge.factors);
-      //System.out.println("edge.factors.intersect(S): " + edge.factors.intersect(S));
       if (edge.factors.intersect(S).cardinality() == 1) {
         // find the new factor from the two in edge.factors
         for (Integer v : edge.factors) {

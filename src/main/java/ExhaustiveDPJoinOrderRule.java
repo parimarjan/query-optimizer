@@ -102,9 +102,13 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
 			 memoizedBestJoins.put(ImmutableBitSet.range(i, i+1),
            new IntermediateJoinState(new ArrayList<ImmutableBitSet[]>(), 0.00));
     }
+
+    QueryGraph curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
     QueryGraph startQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+    // iterates over the csgCmp pairs as defined in thomas neumann's notes
     Iterator<ImmutableBitSet[]> csgCmpIt = startQG.csgCmpIterator();
-    while (csgCmpIt.hasNext()) {
+    while (csgCmpIt.hasNext())
+    {
       ImmutableBitSet[] curPair = csgCmpIt.next();
       ImmutableBitSet S1 = curPair[0];
       ImmutableBitSet S2 = curPair[1];
@@ -113,7 +117,8 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       ArrayList<ImmutableBitSet[]> p2 = memoizedBestJoins.get(S2).bestJoins;
       assert p1 != null;
       assert p2 != null;
-      QueryGraph curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+
+      curQG.reset(multiJoin, mq, rexBuilder, call.builder());
 
       // NOTE: S1, and S2, are two subgraphs with no common elements. So we can
       // execute the optimal ordering for those (p1, and p2) in either order,
@@ -125,24 +130,18 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
         //System.out.println("p1 factors[1]: " + factors[1]);
         curQG.updateGraphBitset(factors);
       }
+
       int factor1Idx = curQG.allVertexes.size()-1;
       for (ImmutableBitSet[] factors : p2) {
-        //System.out.println("p2 factors[0]: " + factors[0]);
-        //System.out.println("p2 factors[1]: " + factors[1]);
         curQG.updateGraphBitset(factors);
       }
-      for (QueryGraph.Vertex v : curQG.allVertexes) {
-        if (v != null) {
-          //System.out.println("v.factors: " + v.factors);
-        }
-      }
+
       // last vertex added must be the one because of factors in p2.
       int factor2Idx = curQG.allVertexes.size()-1;
       assert factor1Idx != factor2Idx;
       // now, cost of joining the two latest nodes.
       ImmutableBitSet[] lastFactors = {S1, S2};
-      //System.out.println("lastFactors1: " + lastFactors[0]);
-      //System.out.println("lastFactors2: " + lastFactors[1]);
+
       curQG.updateGraphBitset(lastFactors);
       double curCost = curQG.costSoFar;
       IntermediateJoinState bestOrder = memoizedBestJoins.get(S);
