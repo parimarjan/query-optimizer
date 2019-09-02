@@ -124,6 +124,7 @@ public class MyMetadataQuery extends RelMetadataQuery
         //System.out.println("row count was null!");
         System.out.println("fileName: " + curQueryName);
         System.out.println("tableKey: " + tableKey);
+        System.out.println("going to exit");
         System.exit(-1);
         //return 10000000000.00;
       }

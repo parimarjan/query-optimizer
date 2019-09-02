@@ -387,7 +387,7 @@ public class QueryOptExperiment {
     for (int i = 0; i < results.size(); i++) {
       Future<RelNode> result = results.get(i);
       try {
-        RelNode node = result.get(5, TimeUnit.SECONDS);
+        RelNode node = result.get(600, TimeUnit.SECONDS);
         nodes.add(node);
       } catch (Exception e) {
           // interrupts if there is any possible error

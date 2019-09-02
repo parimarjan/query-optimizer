@@ -118,7 +118,8 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       assert p1 != null;
       assert p2 != null;
 
-      curQG.reset(multiJoin, mq, rexBuilder, call.builder());
+      curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
+      //curQG.reset(multiJoin, mq, rexBuilder, call.builder());
 
       // NOTE: S1, and S2, are two subgraphs with no common elements. So we can
       // execute the optimal ordering for those (p1, and p2) in either order,
@@ -126,8 +127,6 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       // one subgraph will NOT affect the indices of the factors in the other
       // subgraph.
       for (ImmutableBitSet[] factors : p1) {
-        //System.out.println("p1 factors[0]: " + factors[0]);
-        //System.out.println("p1 factors[1]: " + factors[1]);
         curQG.updateGraphBitset(factors);
       }
 
