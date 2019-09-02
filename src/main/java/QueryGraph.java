@@ -336,33 +336,28 @@ public class QueryGraph implements CsgCmpIterator {
    */
   public double updateGraph(int [] factors)
   {
-    // FIXME: this control should be given to the RL agent.
-    final int majorFactor;
-    final int minorFactor;
-    if (allVertexes.get(factors[0]).cost <= allVertexes.get(factors[1]).cost) {
-      majorFactor = factors[0];
-      minorFactor = factors[1];
-    } else {
-      majorFactor = factors[1];
-      minorFactor = factors[0];
-    }
+    final int rightFactor;
+    final int leftFactor;
+    // just always choose left = minor, and right = major
+    leftFactor = factors[0];
+    rightFactor = factors[1];
 
-    final Vertex majorVertex = allVertexes.get(majorFactor);
-    final Vertex minorVertex = allVertexes.get(minorFactor);
+    final Vertex leftVertex = allVertexes.get(leftFactor);
+    final Vertex rightVertex = allVertexes.get(rightFactor);
 
     // set v ensures that the new vertex we are creating will be added to the
     // factors of the new vertex.
     final int v = allVertexes.size();
-    final ImmutableBitSet newFactors = majorVertex.factors
+    final ImmutableBitSet newFactors = rightVertex.factors
             .rebuild()
-            .addAll(minorVertex.factors)
+            .addAll(leftVertex.factors)
             .set(v)
             .build();
 
     final ImmutableBitSet newFeatures =
-        majorVertex.visibleAttrs
+        rightVertex.visibleAttrs
             .rebuild()
-            .addAll(minorVertex.visibleAttrs)
+            .addAll(leftVertex.visibleAttrs)
             .build();
 
     // Find the join conditions. All conditions whose factors are now all in
@@ -377,14 +372,14 @@ public class QueryGraph implements CsgCmpIterator {
       }
     }
 
-    final Vertex newVertex = new JoinVertex(v, majorFactor, minorFactor,
+    final Vertex newVertex = new JoinVertex(v, rightFactor, leftFactor,
         newFactors, 0.00, ImmutableList.copyOf(conditions), newFeatures);
     allVertexes.add(newVertex);
-    allVertexes.set(majorFactor, null);
-    allVertexes.set(minorFactor, null);
+    allVertexes.set(rightFactor, null);
+    allVertexes.set(leftFactor, null);
 
-    final ImmutableBitSet merged = ImmutableBitSet.of(minorFactor,
-        majorFactor);
+    final ImmutableBitSet merged = ImmutableBitSet.of(leftFactor,
+        rightFactor);
 
     for (int i = 0; i < edges.size(); i++) {
       Edge edge = edges.get(i);
@@ -439,6 +434,82 @@ public class QueryGraph implements CsgCmpIterator {
     assert factorIndices[0] != factorIndices[1];
     updateGraph(factorIndices);
     return factorIndices;
+  }
+
+  public double calculateCost(int [] factors)
+  {
+    // just always choose left = minor, and right = major
+    final int leftFactor = factors[0];
+    final int rightFactor = factors[1];
+
+    final Vertex leftVertex = allVertexes.get(leftFactor);
+    final Vertex rightVertex = allVertexes.get(rightFactor);
+
+    final int v = allVertexes.size();
+    // need to ger conditions for the to be created new joined vertex
+    final ImmutableBitSet newFactors = rightVertex.factors
+            .rebuild()
+            .addAll(leftVertex.factors)
+            .set(v)
+            .build();
+
+    // Find the join conditions. All conditions whose factors are now all in
+    // the join can now be used.
+    final List<RexNode> conditions = new ArrayList<>();
+    final Iterator<Edge> edgeIterator = edges.iterator();
+    while (edgeIterator.hasNext()) {
+      Edge edge = edgeIterator.next();
+      if (newFactors.contains(edge.factors)) {
+        conditions.add(edge.condition);
+        edgeIterator.remove();
+      }
+    }
+
+    final Pair<RelNode, Mappings.TargetMapping> leftPair =
+        relNodes.get(leftFactor);
+    RelNode left = leftPair.left;
+    final Mappings.TargetMapping leftMapping = leftPair.right;
+    final Pair<RelNode, Mappings.TargetMapping> rightPair =
+        relNodes.get(rightFactor);
+    RelNode right = rightPair.left;
+    final Mappings.TargetMapping rightMapping = rightPair.right;
+    final Mappings.TargetMapping mapping =
+        Mappings.merge(leftMapping,
+            Mappings.offsetTarget(rightMapping,
+                left.getRowType().getFieldCount()));
+
+    final RexVisitor<RexNode> shuttle =
+        new RexPermuteInputsShuttle(mapping, left, right);
+    final RexNode condition =
+        RexUtil.composeConjunction(rexBuilder, conditions,
+            false);
+    final RelNode join = relBuilder.push(left)
+        .push(right)
+        .join(JoinRelType.INNER, condition.accept(shuttle))
+        .build();
+    double cost = ((MyCost) mq.getNonCumulativeCost(join)).getCost();
+    return cost;
+  }
+
+  public double calculateCostBitset(ImmutableBitSet[] factors)
+  {
+    // first convert the factors, to int [], representing indices
+    int[] factorIndices = new int[2];
+    for (int i = 0; i < 2; i++) {
+      ImmutableBitSet factor = factors[i];
+      for (int j = 0; j < allVertexes.size(); j++) {
+        Vertex v = allVertexes.get(j);
+        // v can be null, because once it is joined, we set it to null
+        // we use contains, because when updating factors, we add the old and
+        // NEW factor as well
+        if (v != null && v.factors.contains(factor)) {
+          factorIndices[i] = j;
+        }
+      }
+    }
+    //System.out.println("factorIndices in updateGraph: " + factorIndices[0] + ", " + factorIndices[1]);
+    assert factorIndices[0] != factorIndices[1];
+    return calculateCost(factorIndices);
   }
 
   /* Updates the list of relNodes that correspond to each join order selection.

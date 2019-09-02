@@ -138,11 +138,17 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       // last vertex added must be the one because of factors in p2.
       int factor2Idx = curQG.allVertexes.size()-1;
       assert factor1Idx != factor2Idx;
+
       // now, cost of joining the two latest nodes.
       ImmutableBitSet[] lastFactors = {S1, S2};
+      ImmutableBitSet[] lastFactors2 = {S2, S1};
+      double cost1 = curQG.calculateCostBitset(lastFactors);
+      double cost2 = curQG.calculateCostBitset(lastFactors2);
+      if (cost1 < cost2) curQG.updateGraphBitset(lastFactors);
+      else curQG.updateGraphBitset(lastFactors2);
 
-      curQG.updateGraphBitset(lastFactors);
       double curCost = curQG.costSoFar;
+
       IntermediateJoinState bestOrder = memoizedBestJoins.get(S);
       ArrayList<ImmutableBitSet[]> curOrder = new ArrayList<ImmutableBitSet[]>();
       curOrder.addAll(p1);

@@ -134,7 +134,6 @@ public class MyMetadataQuery extends RelMetadataQuery
        //System.out.println(rel);
        return 1.00;
     }
-
     return rowCount;
   }
 
@@ -142,10 +141,6 @@ public class MyMetadataQuery extends RelMetadataQuery
     RelOptCost curCost = new MyCost(0.0, 0.0, 0.0);
     RelNode left = ((Join) rel).getLeft();
     RelNode right = ((Join) rel).getRight();
-    //RelOptCost leftCost = getCumulativeCost(left);
-    //RelOptCost rightCost = getCumulativeCost(right);
-    //double leftRows = ((MyCost) leftCost).cost;
-    //double rightRows = ((MyCost) rightCost).cost;
     double leftRows = getRowCount(left);
     double rightRows = getRowCount(right);
     ((MyCost) curCost).cost = leftRows + rightRows;
@@ -165,12 +160,14 @@ public class MyMetadataQuery extends RelMetadataQuery
     RelNode right = rel.getRight();
     RelNode left = rel.getLeft();
     double leftRows = getRowCount(left);
-    double rightRows = getRowCount(right);
-    if (leftRows <= rightRows) {
-      curCost.cost = 2.00*leftRows;
-    } else {
-      curCost.cost = 2.00*rightRows;
-    }
+    curCost.cost = 2.00*leftRows;
+
+    //double rightRows = getRowCount(right);
+    //if (leftRows <= rightRows) {
+      //curCost.cost = 2.00*leftRows;
+    //} else {
+      //curCost.cost = 2.00*rightRows;
+    //}
     return curCost;
   }
 
@@ -192,7 +189,7 @@ public class MyMetadataQuery extends RelMetadataQuery
 
         // if both the sides have more than 1 table, then can't use index
         // nested loop join.
-        if ((rightTables.size() > 1 && leftTables.size() > 1)
+        if ((leftTables.size() > 1)
             || !params.useIndexNestedLJ) {
           return hashJoinCost;
         }
