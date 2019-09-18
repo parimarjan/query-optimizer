@@ -39,7 +39,8 @@ public class ZeroMQServer {
   public ArrayList<Integer> joinOrderSeq = new ArrayList<Integer>();
 
   public HashMap<String, Double> estCosts = null;
-  public HashMap<String, Double> optCosts = new HashMap<String, Double>();
+  public HashMap<String, Double> optCosts = null;
+  public HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
 
   /* Utilizes the simplest ZeroMQ protocol (PAIR), to communicate resuts / and
    * synchronize with a Python client.

@@ -374,7 +374,7 @@ public class QueryOptExperiment {
   private ArrayList<RelNode> optimizeNodesParallel()
   {
     ArrayList<RelNode> nodes = new ArrayList<RelNode>();
-    ExecutorService executor = Executors.newFixedThreadPool(10);
+    ExecutorService executor = Executors.newFixedThreadPool(1);
     List<Future<RelNode>> results = new ArrayList<Future<RelNode>>();
 
     // TODO: this should happen in parallel
@@ -418,6 +418,7 @@ public class QueryOptExperiment {
     // etc.
     currentQuery = null;
 
+    HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
     // FIXME: need to put up break conditions
     while (true) {
       if (trainQueries == null) {
@@ -432,11 +433,15 @@ public class QueryOptExperiment {
       // the python side should set cardinalities etc. at this point
       zmq.waitForClientTill("setCardinalities");
 
-      ArrayList<RelNode> optNodes = optimizeNodesParallel();
+      // only need to compute these IF true cardinality based costs haven't
+      // been computed before.
 
-      if (estNodes.size() != optNodes.size()) {
-        System.out.println("should have optimized nodes for both estimated and true cardinalities");
-        System.exit(-1);
+      ArrayList<RelNode> optNodes = null;
+      String query0Name = trainQueries.get(0).queryName;
+      // FIXME: assuming the whole batch of trainQueries is passed in together
+      // at least the first time.
+      if (allOptCosts.get(query0Name) == null) {
+        optNodes = optimizeNodesParallel();
       }
 
       // for every batch of estimations, we want to recompute the cost. But for
@@ -445,14 +450,16 @@ public class QueryOptExperiment {
       zmq.estCosts = new HashMap<String, Double>();
       zmq.optCosts = new HashMap<String, Double>();
 
-      for (int i = 0; i < optNodes.size(); i++) {
+      for (int i = 0; i < estNodes.size(); i++) {
         String queryName = trainQueries.get(i).queryName;
         mq.setQueryName(queryName);
         Double estCost = computeCost(mq, estNodes.get(i)).getCost();
-        Double optCost = computeCost(mq, optNodes.get(i)).getCost();
-        if (queryName.equals("1062510563782308795454436663573014615259135596985")) {
-          System.out.println("found debug query");
-          System.out.println("optCost: " + optCost + " estCost: " + estCost);
+        Double optCost;
+        if (optNodes != null) {
+          optCost = computeCost(mq, optNodes.get(i)).getCost();
+          allOptCosts.put(queryName, optCost);
+        } else {
+          optCost = allOptCosts.get(queryName);
         }
         zmq.estCosts.put(queryName, estCost);
         zmq.optCosts.put(queryName, optCost);

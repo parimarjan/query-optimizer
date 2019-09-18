@@ -81,6 +81,7 @@ public class MyMetadataQuery extends RelMetadataQuery
   @Override
   public Double getRowCount(RelNode rel)
   {
+    System.out.println("getRowCount()");
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (params.cardinalities == null) {
       System.err.println("params.cardinalities need to be set to use this metadata provider");
@@ -107,7 +108,7 @@ public class MyMetadataQuery extends RelMetadataQuery
     for (int ti=1; ti < tableNames.size(); ti++) {
       tableKey += " " + tableNames.get(ti);
     }
-
+    System.out.println("tableKey: " + tableKey);
     if (!tableKey.contains("null")) {
       String key = curQueryName;
       HashMap<String, Long> qCards = params.cardinalities.get(key);

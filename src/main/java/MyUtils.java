@@ -122,7 +122,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    //System.out.println("getAllTableNamesWithFilter: ");
+    System.out.println("getAllTableNamesWithFilter: ");
 
     List<RelNode> inputs = rel.getInputs();
     ArrayList<String> tableNames = new ArrayList<String>();
@@ -145,7 +145,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    //System.out.println("getTableName: " + rel);
+    System.out.println("getTableName: " + rel);
     if (rel instanceof RelSubset) {
       RelSubset s = (RelSubset) rel;
       return getTableNameWithFilter(s.getOriginal());
@@ -153,10 +153,12 @@ public class MyUtils {
       List<RexNode> conds = rel.getChildExps();
       String cond = conds.get(0).toString();
       String tableName = getTableNameWithFilter(rel.getInput(0));
+      System.out.println("Filter, table: " + tableName);
       // add first predicate on which there is a filter
       int filterStart = cond.indexOf(",")+1;
       int filterEnd = cond.indexOf(")", filterStart);
       String filterCond = cond.substring(filterStart, filterEnd);
+      System.out.println("filterCond: " + filterCond);
       // only replace the first and last occurence of '
       //filterCond = filterCond.replace("'", "");
       filterStart = filterCond.indexOf("'")+1;
@@ -165,18 +167,18 @@ public class MyUtils {
       if (filterStart != -1 && filterEnd != -1) {
         filterCond = filterCond.substring(filterStart, filterEnd);
       }
-      //filterCond = filterCond.replace(" ", "");
-      //System.out.println("filterCond: " + filterCond);
+      System.out.println("filterCond2: " + filterCond);
       String regex = "^\\s+";
       filterCond = filterCond.replaceAll(regex, "");
-
       tableName +=  filterCond;
-      //System.out.println(tableName);
+      System.out.println("getTabelName with filter ret: " + tableName);
       return tableName;
     } else if (rel instanceof HepRelVertex) {
       return getTableNameWithFilter(((HepRelVertex) rel).getCurrentRel());
     } else if (rel instanceof TableScan) {
+      System.out.println("tableScan");
       List<String> names = rel.getTable().getQualifiedName();
+      System.out.println(names);
       if (names != null) {
         return names.get(1);
       }
@@ -188,7 +190,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    //System.out.println("getAllTableNames: ");
+    System.out.println("getAllTableNames: ");
     //System.out.println(rel);
     //String origPlan = RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
     //System.out.println(origPlan);
