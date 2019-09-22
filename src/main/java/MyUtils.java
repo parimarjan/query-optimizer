@@ -150,22 +150,27 @@ public class MyUtils {
       RelSubset s = (RelSubset) rel;
       return getTableNameWithFilter(s.getOriginal());
     } else if (rel instanceof Filter) {
+      //// FIXME: this is ugly as fuck
       List<RexNode> conds = rel.getChildExps();
       String cond = conds.get(0).toString();
       String tableName = getTableNameWithFilter(rel.getInput(0));
       System.out.println("Filter, table: " + tableName);
       // add first predicate on which there is a filter
+      System.out.println("cond: " + cond);
       int filterStart = cond.indexOf(",")+1;
       int filterEnd = cond.indexOf(")", filterStart);
       String filterCond = cond.substring(filterStart, filterEnd);
       System.out.println("filterCond: " + filterCond);
       // only replace the first and last occurence of '
       //filterCond = filterCond.replace("'", "");
-      filterStart = filterCond.indexOf("'")+1;
-      filterEnd = filterCond.lastIndexOf("'");
+      int filterStart2 = filterCond.indexOf("'")+1;
+      int filterEnd2 = filterCond.lastIndexOf("'");
       // integer predicates don't have '
-      if (filterStart != -1 && filterEnd != -1) {
-        filterCond = filterCond.substring(filterStart, filterEnd);
+      System.out.println("filterIndices");
+      System.out.println(filterStart2);
+      System.out.println(filterEnd2);
+      if (filterStart2 != -1 && filterEnd2 != -1 && (filterStart2 != filterEnd2+1)) {
+        filterCond = filterCond.substring(filterStart2, filterEnd2);
       }
       System.out.println("filterCond2: " + filterCond);
       String regex = "^\\s+";

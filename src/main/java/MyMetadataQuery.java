@@ -81,7 +81,6 @@ public class MyMetadataQuery extends RelMetadataQuery
   @Override
   public Double getRowCount(RelNode rel)
   {
-    System.out.println("getRowCount()");
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (params.cardinalities == null) {
       System.err.println("params.cardinalities need to be set to use this metadata provider");
@@ -99,16 +98,26 @@ public class MyMetadataQuery extends RelMetadataQuery
 
     // in this case, the provided cardinality file should have entries for
     // each of the needed queries.
-    ArrayList<String> tableNames = MyUtils.getAllTableNamesWithFilter(rel);
+    ArrayList<String> tableNamesFilter = MyUtils.getAllTableNamesWithFilter(rel);
+    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
     Double rowCount = null;
 
     java.util.Collections.sort(tableNames);
+    java.util.Collections.sort(tableNamesFilter);
     String tableKey = "";
+    String tableKeyFilter = "";
+
     tableKey += tableNames.get(0);
     for (int ti=1; ti < tableNames.size(); ti++) {
       tableKey += " " + tableNames.get(ti);
     }
+
+    tableKeyFilter += tableNamesFilter.get(0);
+    for (int ti=1; ti < tableNamesFilter.size(); ti++) {
+      tableKeyFilter += " " + tableNamesFilter.get(ti);
+    }
     System.out.println("tableKey: " + tableKey);
+
     if (!tableKey.contains("null")) {
       String key = curQueryName;
       HashMap<String, Long> qCards = params.cardinalities.get(key);
@@ -116,15 +125,21 @@ public class MyMetadataQuery extends RelMetadataQuery
         System.out.println("qCards is null for key: " + key);
         System.exit(-1);
       } else {
-        Long rowCountLong = qCards.get(tableKey);
-        //System.out.println("found rowCount from file!: " + rowCount);
+        Long rowCountLong = qCards.get(tableKeyFilter);
         if (rowCountLong != null) {
           rowCount = rowCountLong.doubleValue();
           return rowCount;
         }
-        //System.out.println("row count was null!");
+        // check 2: ughghhh
+        rowCountLong = qCards.get(tableKey);
+        if (rowCountLong != null) {
+          rowCount = rowCountLong.doubleValue();
+          return rowCount;
+        }
+        // we're fucked
         System.out.println("fileName: " + curQueryName);
         System.out.println("tableKey: " + tableKey);
+        System.out.println("tableKeyFilter: " + tableKeyFilter);
         System.out.println("going to exit");
         System.exit(-1);
         //return 10000000000.00;
