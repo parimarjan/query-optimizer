@@ -87,7 +87,7 @@ public class QueryGraph implements CsgCmpIterator {
   public void reset(LoptMultiJoin multiJoin, MyMetadataQuery mq, RexBuilder
       rexBuilder, RelBuilder relBuilder)
   {
-    System.out.println("QueryGraph.reset");
+    //System.out.println("QueryGraph.reset");
 		this.costSoFar = 0.00;
     this.multiJoin = multiJoin;
     this.rexBuilder = rexBuilder;
@@ -103,7 +103,7 @@ public class QueryGraph implements CsgCmpIterator {
     for (int i = 0; i < multiJoin.getNumJoinFactors(); i++) {
       RelNode rel = multiJoin.getJoinFactor(i);
       String tableName = MyUtils.getTableName(rel);
-      System.out.println(tableName);
+      //System.out.println(tableName);
       if (tableName == null) {
         System.out.println("tableName null");
         System.exit(-1);
@@ -116,7 +116,6 @@ public class QueryGraph implements CsgCmpIterator {
       }
       totalFieldCount += curFieldCount;
     }
-    System.out.println("joinFactors loop done");
 
     allVertexes = new ArrayList<Vertex>();
     edges = new ArrayList<Edge>();
@@ -129,7 +128,6 @@ public class QueryGraph implements CsgCmpIterator {
       final RelNode rel = multiJoin.getJoinFactor(i);
       // this is a vertex, so must be one of the tables from the database
       String tableName = MyUtils.getTableName(rel);
-      System.out.println(tableName);
       if (tableName == null) {
         System.out.println("tableName null");
         System.exit(-1);
@@ -141,13 +139,11 @@ public class QueryGraph implements CsgCmpIterator {
       updateRelNodes(newVertex);
       x += rel.getRowType().getFieldCount();
     }
-    System.out.println("second multiJoin loop done");
 
     // add the Edges
     for (RexNode node : multiJoin.getJoinFilters()) {
       edges.add(createEdge(node));
     }
-    System.out.println("edges added");
 
     // if there are two edges between the same pair of nodes, this collapses
     // them to a single edge.
@@ -438,7 +434,6 @@ public class QueryGraph implements CsgCmpIterator {
         }
       }
     }
-    //System.out.println("factorIndices in updateGraph: " + factorIndices[0] + ", " + factorIndices[1]);
     assert factorIndices[0] != factorIndices[1];
     updateGraph(factorIndices);
     return factorIndices;
@@ -515,7 +510,6 @@ public class QueryGraph implements CsgCmpIterator {
         }
       }
     }
-    //System.out.println("factorIndices in updateGraph: " + factorIndices[0] + ", " + factorIndices[1]);
     assert factorIndices[0] != factorIndices[1];
     return calculateCost(factorIndices);
   }

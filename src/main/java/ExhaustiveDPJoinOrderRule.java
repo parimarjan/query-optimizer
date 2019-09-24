@@ -44,7 +44,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
 
   String queryName = null;
   public void setQueryName(String queryName) {
-    System.out.println("setQueryName");
+    //System.out.println("setQueryName");
     this.queryName = queryName;
   }
 
@@ -86,7 +86,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
   @Override
   public void onMatch(RelOptRuleCall call)
   {
-    System.out.println("onMatch");
+    //System.out.println("onMatch");
     RelNode orig = call.getRelList().get(0);
     call.getPlanner().setImportance(orig, 0.0);
     //memoizedBestJoins = new HashMap<ImmutableBitSet, ArrayList<ImmutableBitSet[]>>();
@@ -96,7 +96,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     final MyMetadataQuery mq = MyMetadataQuery.instance();
     if (queryName != null) {
       mq.setQueryName(queryName);
-      System.out.println("mq.SetQueryName done");
+      //System.out.println("mq.SetQueryName done");
     }
 
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
@@ -105,15 +105,15 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
 			 memoizedBestJoins.put(ImmutableBitSet.range(i, i+1),
            new IntermediateJoinState(new ArrayList<ImmutableBitSet[]>(), 0.00));
     }
-    System.out.println("first loop done");
+    //System.out.println("first loop done");
 
     //QueryGraph curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
     QueryGraph curQG;
     QueryGraph startQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-    System.out.println("startQG created");
+    //System.out.println("startQG created");
     // iterates over the csgCmp pairs as defined in thomas neumann's notes
     Iterator<ImmutableBitSet[]> csgCmpIt = startQG.csgCmpIterator();
-    System.out.println("startQG.csgCmpIterator started");
+    //System.out.println("startQG.csgCmpIterator started");
     while (csgCmpIt.hasNext())
     {
       ImmutableBitSet[] curPair = csgCmpIt.next();
@@ -126,7 +126,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
       assert p2 != null;
 
       curQG = new QueryGraph(multiJoin, mq, rexBuilder, call.builder());
-      System.out.println("new curQG created");
+      //System.out.println("new curQG created");
       //curQG.reset(multiJoin, mq, rexBuilder, call.builder());
 
       // NOTE: S1, and S2, are two subgraphs with no common elements. So we can
@@ -184,7 +184,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     Query curQuery = QueryOptExperiment.getCurrentQuery();
 
     if (curQuery != null) {
-      System.out.println("curQuery NOT NULL");
+      //System.out.println("curQuery NOT NULL");
       // in testCardinalities case, we do not need to set these up
       curQuery.joinOrders.put("EXHAUSTIVE", new MyUtils.JoinOrder());
       HashMap<ArrayList<String>, Double> optCosts =

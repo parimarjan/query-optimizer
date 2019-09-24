@@ -122,7 +122,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    System.out.println("getAllTableNamesWithFilter: ");
+    //System.out.println("getAllTableNamesWithFilter: ");
 
     List<RelNode> inputs = rel.getInputs();
     ArrayList<String> tableNames = new ArrayList<String>();
@@ -145,7 +145,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    System.out.println("getTableName: " + rel);
+    //System.out.println("getTableName: " + rel);
     if (rel instanceof RelSubset) {
       RelSubset s = (RelSubset) rel;
       return getTableNameWithFilter(s.getOriginal());
@@ -154,36 +154,36 @@ public class MyUtils {
       List<RexNode> conds = rel.getChildExps();
       String cond = conds.get(0).toString();
       String tableName = getTableNameWithFilter(rel.getInput(0));
-      System.out.println("Filter, table: " + tableName);
+      //System.out.println("Filter, table: " + tableName);
       // add first predicate on which there is a filter
-      System.out.println("cond: " + cond);
+      //System.out.println("cond: " + cond);
       int filterStart = cond.indexOf(",")+1;
       int filterEnd = cond.indexOf(")", filterStart);
       String filterCond = cond.substring(filterStart, filterEnd);
-      System.out.println("filterCond: " + filterCond);
+      //System.out.println("filterCond: " + filterCond);
       // only replace the first and last occurence of '
       //filterCond = filterCond.replace("'", "");
       int filterStart2 = filterCond.indexOf("'")+1;
       int filterEnd2 = filterCond.lastIndexOf("'");
       // integer predicates don't have '
-      System.out.println("filterIndices");
-      System.out.println(filterStart2);
-      System.out.println(filterEnd2);
+      //System.out.println("filterIndices");
+      //System.out.println(filterStart2);
+      //System.out.println(filterEnd2);
       if (filterStart2 != -1 && filterEnd2 != -1 && (filterStart2 != filterEnd2+1)) {
         filterCond = filterCond.substring(filterStart2, filterEnd2);
       }
-      System.out.println("filterCond2: " + filterCond);
+      //System.out.println("filterCond2: " + filterCond);
       String regex = "^\\s+";
       filterCond = filterCond.replaceAll(regex, "");
       tableName +=  filterCond;
-      System.out.println("getTabelName with filter ret: " + tableName);
+      //System.out.println("getTabelName with filter ret: " + tableName);
       return tableName;
     } else if (rel instanceof HepRelVertex) {
       return getTableNameWithFilter(((HepRelVertex) rel).getCurrentRel());
     } else if (rel instanceof TableScan) {
-      System.out.println("tableScan");
+      //System.out.println("tableScan");
       List<String> names = rel.getTable().getQualifiedName();
-      System.out.println(names);
+      //System.out.println(names);
       if (names != null) {
         return names.get(1);
       }
@@ -195,7 +195,7 @@ public class MyUtils {
     if (rel == null) {
       return null;
     }
-    System.out.println("getAllTableNames: ");
+    //System.out.println("getAllTableNames: ");
     //System.out.println(rel);
     //String origPlan = RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES);
     //System.out.println(origPlan);
@@ -233,15 +233,6 @@ public class MyUtils {
     } else if (rel instanceof TableScan) {
       List<String> names = rel.getTable().getQualifiedName();
       if (names != null) {
-        //System.out.println("table name was: " + names.get(1));
-        // TODO: is the more general version ever needed?
-        //System.out.println(rel);
-        //String tableName = "";
-        //for (String s : names) {
-          //tableName += s "-";
-          //System.out.println(s);
-        //}
-        //return tableName;
         return names.get(1);
       }
     }

@@ -89,7 +89,7 @@ public class MyMetadataQuery extends RelMetadataQuery
 
     String curQueryName;
     if (queryName == null) {
-      System.out.println("queryName null");
+      //System.out.println("queryName null");
       Query query = QueryOptExperiment.getCurrentQuery();
       curQueryName = query.queryName;
     } else {
@@ -116,13 +116,13 @@ public class MyMetadataQuery extends RelMetadataQuery
     for (int ti=1; ti < tableNamesFilter.size(); ti++) {
       tableKeyFilter += " " + tableNamesFilter.get(ti);
     }
-    System.out.println("tableKey: " + tableKey);
+    //System.out.println("tableKey: " + tableKey);
 
     if (!tableKey.contains("null")) {
       String key = curQueryName;
       HashMap<String, Long> qCards = params.cardinalities.get(key);
       if (qCards == null) {
-        System.out.println("qCards is null for key: " + key);
+        //System.out.println("qCards is null for key: " + key);
         System.exit(-1);
       } else {
         Long rowCountLong = qCards.get(tableKeyFilter);
