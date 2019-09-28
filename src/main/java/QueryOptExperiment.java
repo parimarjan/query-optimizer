@@ -374,7 +374,7 @@ public class QueryOptExperiment {
   private ArrayList<RelNode> optimizeNodesParallel()
   {
     ArrayList<RelNode> nodes = new ArrayList<RelNode>();
-    ExecutorService executor = Executors.newFixedThreadPool(1);
+    ExecutorService executor = Executors.newFixedThreadPool(10);
     List<Future<RelNode>> results = new ArrayList<Future<RelNode>>();
 
     // TODO: this should happen in parallel

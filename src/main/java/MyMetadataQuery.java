@@ -96,42 +96,42 @@ public class MyMetadataQuery extends RelMetadataQuery
       curQueryName = queryName;
     }
 
-    // in this case, the provided cardinality file should have entries for
-    // each of the needed queries.
-    ArrayList<String> tableNamesFilter = MyUtils.getAllTableNamesWithFilter(rel);
-    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
     Double rowCount = null;
-
+    ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
     java.util.Collections.sort(tableNames);
-    java.util.Collections.sort(tableNamesFilter);
     String tableKey = "";
-    String tableKeyFilter = "";
-
     tableKey += tableNames.get(0);
     for (int ti=1; ti < tableNames.size(); ti++) {
       tableKey += " " + tableNames.get(ti);
     }
 
-    tableKeyFilter += tableNamesFilter.get(0);
-    for (int ti=1; ti < tableNamesFilter.size(); ti++) {
-      tableKeyFilter += " " + tableNamesFilter.get(ti);
-    }
-    //System.out.println("tableKey: " + tableKey);
-
     if (!tableKey.contains("null")) {
+      Long rowCountLong;
+
       String key = curQueryName;
       HashMap<String, Long> qCards = params.cardinalities.get(key);
       if (qCards == null) {
         //System.out.println("qCards is null for key: " + key);
         System.exit(-1);
       } else {
-        Long rowCountLong = qCards.get(tableKeyFilter);
+        // check 2: ughghhh
+        rowCountLong = qCards.get(tableKey);
         if (rowCountLong != null) {
           rowCount = rowCountLong.doubleValue();
           return rowCount;
         }
-        // check 2: ughghhh
-        rowCountLong = qCards.get(tableKey);
+
+        // in this case, the provided cardinality file should have entries for
+        // each of the needed queries.
+        ArrayList<String> tableNamesFilter = MyUtils.getAllTableNamesWithFilter(rel);
+        java.util.Collections.sort(tableNamesFilter);
+        String tableKeyFilter = "";
+        tableKeyFilter += tableNamesFilter.get(0);
+        for (int ti=1; ti < tableNamesFilter.size(); ti++) {
+          tableKeyFilter += " " + tableNamesFilter.get(ti);
+        }
+
+        rowCountLong = qCards.get(tableKeyFilter);
         if (rowCountLong != null) {
           rowCount = rowCountLong.doubleValue();
           return rowCount;
