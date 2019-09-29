@@ -46,6 +46,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.apache.calcite.rel.core.RelFactories;
 
+// for loading / saving costs
+import java.util.*;
+import java.io.Serializable;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.*;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.apache.commons.io.FileUtils;
+
 /* Will contain all the parameters / data etc. to drive one end to end
  * experiment.
  */
@@ -53,6 +63,7 @@ public class QueryOptExperiment {
 
   private static CalciteConnection conn;
   private static String dbUrl;
+  public String allOptCostsPersistentFN = "./allOptParCosts.ser";
 
   public enum PLANNER_TYPE
   {
@@ -418,7 +429,9 @@ public class QueryOptExperiment {
     // etc.
     currentQuery = null;
 
-    HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
+    //HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
+    HashMap<String, Double> allOptCosts = loadHM(allOptCostsPersistentFN);
+
     // FIXME: need to put up break conditions
     while (true) {
       if (trainQueries == null) {
@@ -472,6 +485,7 @@ public class QueryOptExperiment {
       if (false) {
         break;
       }
+      saveUpdatedHM(allOptCostsPersistentFN, allOptCosts);
     }
   }
 
@@ -752,5 +766,49 @@ public class QueryOptExperiment {
       params.cardinalities = gson.fromJson(jsonStr,
           new TypeToken<HashMap<String, HashMap<String, Long>>>() {}.getType());
 
+  }
+
+  /// FIXME: temporary stuff, should be separate class for persistent things
+  public void saveUpdatedHM(String fileName, HashMap<String,Double>
+      updatedCosts) {
+    System.out.println("saveUpdatedHM " + fileName);
+    HashMap<String, Double> oldCosts = (HashMap) loadHM(fileName);
+    HashMap<String, Double> newCosts = new HashMap<String, Double>();
+    if (oldCosts != null){
+      // ignore this guy, file probably didn't exist.
+      newCosts.putAll(oldCosts);
+    }
+    newCosts.putAll(updatedCosts);
+    saveObj(newCosts, fileName);
+  }
+
+  // FIXME: make these general purpose
+  private void saveObj(Serializable obj, String fileName)
+  {
+		try {
+			ObjectOutputStream oos = new ObjectOutputStream(
+							new FileOutputStream(fileName)
+			);
+			oos.writeObject(obj);
+			oos.flush();
+			oos.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}
+  }
+
+  public HashMap<String,Double> loadHM(String fileName) {
+    try {
+      FileInputStream fis = new FileInputStream(fileName);
+      ObjectInputStream ois = new ObjectInputStream(fis);
+      HashMap<String, Double> costs = (HashMap) ois.readObject();
+      ois.close();
+      System.out.println("loadHM successfully found file to load");
+      return costs;
+    } catch (Exception e) {
+      System.out.println(e);
+    }
+    HashMap<String, Double> costs = new HashMap<String, Double>();
+    return costs;
   }
 }
