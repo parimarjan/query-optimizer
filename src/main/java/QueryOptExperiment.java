@@ -429,8 +429,8 @@ public class QueryOptExperiment {
     // etc.
     currentQuery = null;
 
-    //HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
-    HashMap<String, Double> allOptCosts = loadHM(allOptCostsPersistentFN);
+    HashMap<String, Double> allOptCosts = new HashMap<String, Double>();
+    //HashMap<String, Double> allOptCosts = loadHM(allOptCostsPersistentFN);
 
     // FIXME: need to put up break conditions
     while (true) {

@@ -81,6 +81,10 @@ public class MyMetadataQuery extends RelMetadataQuery
   @Override
   public Double getRowCount(RelNode rel)
   {
+    if (true) {
+      return 420.0;
+    }
+
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (params.cardinalities == null) {
       System.err.println("params.cardinalities need to be set to use this metadata provider");
