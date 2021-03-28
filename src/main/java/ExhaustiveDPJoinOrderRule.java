@@ -96,7 +96,7 @@ public class ExhaustiveDPJoinOrderRule extends RelOptRule
     final MyMetadataQuery mq = MyMetadataQuery.instance();
     if (queryName != null) {
       mq.setQueryName(queryName);
-      //System.out.println("mq.SetQueryName done");
+      System.out.println("mq.SetQueryName done");
     }
 
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);

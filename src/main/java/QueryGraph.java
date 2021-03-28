@@ -106,7 +106,9 @@ public class QueryGraph implements CsgCmpIterator {
       //System.out.println(tableName);
       if (tableName == null) {
         System.out.println("tableName null");
+        System.out.println(rel);
         System.exit(-1);
+        //continue;
       }
       Integer offset = tableOffsets.get(tableName);
       assert offset != null;

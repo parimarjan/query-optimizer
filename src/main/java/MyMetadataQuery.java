@@ -81,24 +81,27 @@ public class MyMetadataQuery extends RelMetadataQuery
   @Override
   public Double getRowCount(RelNode rel)
   {
-    if (true) {
-      return 420.0;
-    }
+    System.out.println("getRowCount!");
+    //if (true) {
+      //return 420.0;
+    //}
 
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (params.cardinalities == null) {
       System.err.println("params.cardinalities need to be set to use this metadata provider");
       System.exit(-1);
     }
+    System.out.println("after getParams");
 
     String curQueryName;
     if (queryName == null) {
-      //System.out.println("queryName null");
+      System.out.println("queryName null");
       Query query = QueryOptExperiment.getCurrentQuery();
       curQueryName = query.queryName;
     } else {
       curQueryName = queryName;
     }
+    System.out.println("got curQueryName");
 
     Double rowCount = null;
     ArrayList<String> tableNames = MyUtils.getAllTableNames(rel);
@@ -108,6 +111,7 @@ public class MyMetadataQuery extends RelMetadataQuery
     for (int ti=1; ti < tableNames.size(); ti++) {
       tableKey += " " + tableNames.get(ti);
     }
+    System.out.println(tableKey);
 
     if (!tableKey.contains("null")) {
       Long rowCountLong;
@@ -115,7 +119,7 @@ public class MyMetadataQuery extends RelMetadataQuery
       String key = curQueryName;
       HashMap<String, Long> qCards = params.cardinalities.get(key);
       if (qCards == null) {
-        //System.out.println("qCards is null for key: " + key);
+        System.out.println("qCards is null for key: " + key);
         System.exit(-1);
       } else {
         // check 2: ughghhh
@@ -150,8 +154,8 @@ public class MyMetadataQuery extends RelMetadataQuery
       }
     } else {
        // these seem to happen mostly for aggregate nodes etc.
-       //System.out.println("tableKey had null: " + tableKey);
-       //System.out.println(rel);
+       System.out.println("tableKey had null: " + tableKey);
+       System.out.println(rel);
        return 1.00;
     }
     return rowCount;
@@ -191,13 +195,13 @@ public class MyMetadataQuery extends RelMetadataQuery
     return curCost;
   }
 
-	@Override
-  public RelOptCost getCumulativeCost(RelNode rel) {
+	//@Override
+  public RelOptCost getCumulativeCost2(RelNode rel) {
     return super.getCumulativeCost(rel);
   }
 
-	@Override
-  public RelOptCost getNonCumulativeCost(RelNode rel) {
+	//@Override
+  public RelOptCost getNonCumulativeCost2(RelNode rel) {
     RelOptCost origCost = super.getNonCumulativeCost(rel);
     QueryOptExperiment.Params params = QueryOptExperiment.getParams();
     if (COST_MODEL_NAME.equals("MM")) {

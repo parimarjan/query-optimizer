@@ -63,7 +63,7 @@ class Main {
     /// FIXME: handle booleans correctly
     boolean onlyFinalReward = (Integer.parseInt(cmd.getOptionValue("onlyFinalReward", "0")) == 1);
     boolean lopt = (Integer.parseInt(cmd.getOptionValue("lopt", "1")) == 1);
-    boolean python = (Integer.parseInt(cmd.getOptionValue("python", "1")) == 1);
+    boolean python = (Integer.parseInt(cmd.getOptionValue("python", "0")) == 1);
     boolean testCardinalities = (Integer.parseInt(cmd.getOptionValue("testCardinalities", "1")) == 1);
     boolean exhaustive = (Integer.parseInt(cmd.getOptionValue("exhaustive", "0")) == 1);
     boolean leftDeep = (Integer.parseInt(cmd.getOptionValue("leftDeep", "0")) == 1);

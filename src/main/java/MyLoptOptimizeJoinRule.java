@@ -71,6 +71,12 @@ import java.util.TreeSet;
 public class MyLoptOptimizeJoinRule extends RelOptRule {
   public static final MyLoptOptimizeJoinRule INSTANCE =
       new MyLoptOptimizeJoinRule(RelFactories.LOGICAL_BUILDER);
+  String queryName = null;
+
+  public void setQueryName(String queryName) {
+    //System.out.println("setQueryName");
+    this.queryName = queryName;
+  }
 
   //// can have exact same thing here for our Rule.
   /** Creates a MyLoptOptimizeJoinRule. */
@@ -88,16 +94,30 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
   //~ Methods ----------------------------------------------------------------
 
   public void onMatch(RelOptRuleCall call) {
-    RelNode orig = call.getRelList().get(0);
-    call.getPlanner().setImportance(orig, 0.0);
     final MultiJoin multiJoinRel = call.rel(0);
     final LoptMultiJoin multiJoin = new LoptMultiJoin(multiJoinRel);
+// does this give use various selectivities etc?
     //final RelMetadataQuery mq = call.getMetadataQuery();
     final MyMetadataQuery mq = MyMetadataQuery.instance();
+    if (queryName != null) {
+      mq.setQueryName(queryName);
+      System.out.println("mq.SetQueryName done");
+    }
 
     findRemovableOuterJoins(mq, multiJoin);
 
+    //List<ImmutableBitSet> projFields = multiJoinRel.getProjFields();
+    //for (ImmutableBitSet bS : projFields) {
+      //if (bS != null) {
+        //for (Integer i : bS) {
+          //System.out.println(i);
+        //}
+      //} else System.out.println("bs was null!");
+    //}
+
+/// different clusters of the join graph? is there only one cluster?
     final RexBuilder rexBuilder = multiJoinRel.getCluster().getRexBuilder();
+///// PN: this is confusing ----> figure out its use for us.
     final LoptSemiJoinOptimizer semiJoinOpt =
         new LoptSemiJoinOptimizer(call.getMetadataQuery(), multiJoin, rexBuilder);
 
@@ -479,7 +499,6 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     // with the best cumulative cost. Volcano planner keeps the alternative
     // join subtrees and cost the final plan to pick the best one.
     for (RelNode plan : plans) {
-      //System.out.println("lopt plan, costs: " + mq.getCumulativeCost(plan));
       call.transformTo(plan);
     }
   }
@@ -616,9 +635,8 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     if (joinKeys.isEmpty()) {
       return null;
     } else {
-      return mq.getRowCount(semiJoinOpt.getChosenSemiJoin(factor));
-      //return mq.getDistinctRowCount(semiJoinOpt.getChosenSemiJoin(factor),
-          //joinKeys.build(), null);
+      return mq.getDistinctRowCount(semiJoinOpt.getChosenSemiJoin(factor),
+          joinKeys.build(), null);
     }
   }
 
@@ -962,10 +980,10 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
     RelOptCost costPushDown = null;
     RelOptCost costTop = null;
     if (pushDownTree != null) {
-      costPushDown = ((MyMetadataQuery) mq).getCumulativeCost(pushDownTree.getJoinTree());
+      costPushDown = mq.getCumulativeCost(pushDownTree.getJoinTree());
     }
     if (topTree != null) {
-      costTop = ((MyMetadataQuery) mq).getCumulativeCost(topTree.getJoinTree());
+      costTop = mq.getCumulativeCost(topTree.getJoinTree());
     }
 
     if (pushDownTree == null) {
@@ -1894,14 +1912,13 @@ public class MyLoptOptimizeJoinRule extends RelOptRule {
       boolean selfJoin) {
     boolean swap = false;
 
-    // FIXME: need to be able to access leaf for this.
     //if (selfJoin) {
       //return !multiJoin.isLeftFactorInRemovableSelfJoin(
           //((LoptJoinTree.Leaf) left.getFactorTree()).getId());
     //}
 
-    Double leftRowCount = mq.getRowCount(left.getJoinTree());
-    Double rightRowCount = mq.getRowCount(right.getJoinTree());
+    final Double leftRowCount = mq.getRowCount(left.getJoinTree());
+    final Double rightRowCount = mq.getRowCount(right.getJoinTree());
 
     // The left side is smaller than the right if it has fewer rows,
     // or if it has the same number of rows as the right (excluding

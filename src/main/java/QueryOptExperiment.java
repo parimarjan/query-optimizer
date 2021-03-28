@@ -134,17 +134,29 @@ public class QueryOptExperiment {
       ArrayList<RelOptRule> rules = new ArrayList<RelOptRule>();
       // TODO: add the common ones
 
+        //ImmutableList.of(ExhaustiveDPJoinOrderRule.INSTANCE,
+                         //FilterJoinRule.FILTER_ON_JOIN,
+                         //ProjectMergeRule.INSTANCE);
       switch(this){
         case EXHAUSTIVE:
           ExhaustiveDPJoinOrderRule exhRule =
             new ExhaustiveDPJoinOrderRule(RelFactories.LOGICAL_BUILDER);
           exhRule.setQueryName(queryName);
           rules.add(exhRule);
+          rules.add(FilterJoinRule.FILTER_ON_JOIN);
+          rules.add(ProjectMergeRule.INSTANCE);
           return rules;
 
         // FIXME: initialize rules with sql etc. here
         case LOpt:
-          return LOPT_RULES;
+          MyLoptOptimizeJoinRule loptRule =
+            new MyLoptOptimizeJoinRule(RelFactories.LOGICAL_BUILDER);
+          loptRule.setQueryName(queryName);
+          rules.add(loptRule);
+          rules.add(FilterJoinRule.FILTER_ON_JOIN);
+          rules.add(ProjectMergeRule.INSTANCE);
+          return rules;
+          //return LOPT_RULES;
         case RANDOM:
           return RANDOM_RULES;
         case BUSHY:
@@ -337,7 +349,10 @@ public class QueryOptExperiment {
     {
 			this.sql = query.sql;
       this.queryName = query.queryName;
-      PLANNER_TYPE t = PLANNER_TYPE.EXHAUSTIVE;
+      PLANNER_TYPE t = PLANNER_TYPE.LOpt;
+      //PLANNER_TYPE t = PLANNER_TYPE.EXHAUSTIVE;
+      //PLANNER_TYPE t = PLANNER_TYPE.LEFT_DEEP;
+
       try {
         Frameworks.ConfigBuilder bld = getDefaultFrameworkBuilder();
         bld.programs(MyJoinUtils.genJoinRule(t.getRules(queryName), 1));
